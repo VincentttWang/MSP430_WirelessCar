@@ -42,74 +42,75 @@ static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
         }
     }
 
-    /* 2) 清除并刷新 FIFO */
+    /* 2) 填充目标寄存器地址至 TX FIFO */
     DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
     DL_I2C_flushControllerTXFIFO(Gray_JY61P_I2C_INST);
     DL_I2C_flushControllerRXFIFO(Gray_JY61P_I2C_INST);
 
-    /* 3) TX 阶段：发送目标寄存器地址，抑制 STOP 准备重复起始 */
-    DL_I2C_transmitControllerData(Gray_JY61P_I2C_INST, reg);
-    DL_I2C_startControllerTransferAdvanced(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
-        DL_I2C_CONTROLLER_DIRECTION_TX, 1U,
-        DL_I2C_CONTROLLER_START_ENABLE,
-        DL_I2C_CONTROLLER_STOP_DISABLE,
-        DL_I2C_CONTROLLER_ACK_DISABLE);
+    DL_I2C_fillControllerTXFIFO(Gray_JY61P_I2C_INST, &reg, 1U);
 
-    /* 4) 等待 BUSY 置位 */
-    guard = 200U;
-    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
-            DL_I2C_CONTROLLER_STATUS_BUSY) == 0U) {
-        if (--guard == 0U) { break; }
-    }
-
-    /* 5) 等待地址发送完成 */
-    guard = GW_I2C_GUARD_XFER;
-    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
-            DL_I2C_CONTROLLER_STATUS_BUSY) != 0U) {
+    guard = GW_I2C_GUARD_IDLE;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
         if (--guard == 0U) {
             DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
             return false;
         }
     }
+
+    /* 3) TX 阶段：发送 1 字节寄存器地址（产生完整 START + STOP，感为从机需要 STOP 触发地址锁存） */
+    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+                                   DL_I2C_CONTROLLER_DIRECTION_TX, 1U);
+
+    guard = GW_I2C_GUARD_XFER;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U) {
+        if (--guard == 0U) {
+            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+            return false;
+        }
+    }
+
+    guard = GW_I2C_GUARD_IDLE;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
+        if (--guard == 0U) {
+            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+            return false;
+        }
+    }
+
+    status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST);
     if ((status & DL_I2C_CONTROLLER_STATUS_ERROR) != 0U) {
         DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
         return false;
     }
+    DL_I2C_flushControllerTXFIFO(Gray_JY61P_I2C_INST);
 
-    /* 6) RX 阶段：重复起始读 len 字节数据，使能 STOP */
-    DL_I2C_startControllerTransferAdvanced(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
-        DL_I2C_CONTROLLER_DIRECTION_RX, (uint32_t)len,
-        DL_I2C_CONTROLLER_START_ENABLE,
-        DL_I2C_CONTROLLER_STOP_ENABLE,
-        DL_I2C_CONTROLLER_ACK_ENABLE);
+    /* 4) RX 阶段：读取 len 字节数据 */
+    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+                                   DL_I2C_CONTROLLER_DIRECTION_RX, (uint32_t)len);
 
-    /* 7) 等待 BUSY 置位 */
-    guard = 200U;
-    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
-            DL_I2C_CONTROLLER_STATUS_BUSY) == 0U) {
-        if (--guard == 0U) { break; }
-    }
-
-    /* 8) 循环从 RX FIFO 取出数据 */
-    for (uint8_t i = 0U; i < len; i++) {
-        guard = GW_I2C_GUARD_XFER;
-        while (DL_I2C_isControllerRXFIFOEmpty(Gray_JY61P_I2C_INST)) {
-            if (--guard == 0U) {
-                DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
-                return false;
-            }
-        }
-        val[i] = DL_I2C_receiveControllerData(Gray_JY61P_I2C_INST);
-    }
-
-    /* 9) 等待控制器完成并释放总线 */
     guard = GW_I2C_GUARD_XFER;
-    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
-            DL_I2C_CONTROLLER_STATUS_BUSY) != 0U) {
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U) {
         if (--guard == 0U) {
             DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
             return false;
         }
+    }
+
+    guard = GW_I2C_GUARD_IDLE;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
+        if (--guard == 0U) {
+            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+            return false;
+        }
+    }
+
+    for (uint8_t i = 0U; i < len; i++) {
+        val[i] = DL_I2C_receiveControllerData(Gray_JY61P_I2C_INST);
     }
     return true;
 }
@@ -123,8 +124,9 @@ static bool Gw_I2C_WriteBytes(uint8_t reg, const uint8_t *data, uint8_t len)
 {
     uint32_t guard;
     uint32_t status;
+    uint8_t temp[GRAYSCALE_SENSOR_CHANNEL_COUNT + 1U];
 
-    if (data == NULL || len == 0U) {
+    if (data == NULL || len == 0U || len > GRAYSCALE_SENSOR_CHANNEL_COUNT) {
         return false;
     }
 
@@ -133,55 +135,70 @@ static bool Gw_I2C_WriteBytes(uint8_t reg, const uint8_t *data, uint8_t len)
             DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
         if (--guard == 0U) return false;
     }
+
     DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
     DL_I2C_flushControllerTXFIFO(Gray_JY61P_I2C_INST);
     DL_I2C_flushControllerRXFIFO(Gray_JY61P_I2C_INST);
 
-    DL_I2C_transmitControllerData(Gray_JY61P_I2C_INST, reg);
-    for (uint8_t i = 0U; i < len; i++) {
-        DL_I2C_transmitControllerData(Gray_JY61P_I2C_INST, data[i]);
-    }
+    temp[0] = reg;
+    memcpy(&temp[1], data, len);
 
-    DL_I2C_startControllerTransferAdvanced(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
-        DL_I2C_CONTROLLER_DIRECTION_TX, (uint32_t)(1U + len),
-        DL_I2C_CONTROLLER_START_ENABLE,
-        DL_I2C_CONTROLLER_STOP_ENABLE,
-        DL_I2C_CONTROLLER_ACK_DISABLE);
+    DL_I2C_fillControllerTXFIFO(Gray_JY61P_I2C_INST, temp, (uint32_t)(len + 1U));
 
-    guard = 200U;
-    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
-            DL_I2C_CONTROLLER_STATUS_BUSY) == 0U) {
-        if (--guard == 0U) break;
-    }
-    guard = GW_I2C_GUARD_XFER;
-    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
-            DL_I2C_CONTROLLER_STATUS_BUSY) != 0U) {
+    guard = GW_I2C_GUARD_IDLE;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
         if (--guard == 0U) {
             DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
             return false;
         }
     }
-    if ((status & DL_I2C_CONTROLLER_STATUS_ERROR) != 0U) {
-        DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
-        return false;
+
+    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+                                   DL_I2C_CONTROLLER_DIRECTION_TX, (uint32_t)(len + 1U));
+
+    guard = GW_I2C_GUARD_XFER;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U) {
+        if (--guard == 0U) {
+            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+            return false;
+        }
     }
+
+    guard = GW_I2C_GUARD_IDLE;
+    while ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
+        if (--guard == 0U) {
+            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+            return false;
+        }
+    }
+    DL_I2C_flushControllerTXFIFO(Gray_JY61P_I2C_INST);
     return true;
 }
 
-void GrayscaleSensor_Init(void)
+bool GrayscaleSensor_Probe(void)
 {
     uint8_t ping_val = 0U;
     s_gw_i2c_online = false;
 
     /* Ping 探查感为 I2C 从机（返回 0x66 表示正常） */
-    for (uint8_t retry = 0; retry < 3U; retry++) {
+    for (uint8_t retry = 0U; retry < 3U; retry++) {
         if (Gw_I2C_ReadByte(GW_GRAY_REG_PING, &ping_val)) {
             if (ping_val == GW_GRAY_PING_RESPONSE) {
                 s_gw_i2c_online = true;
                 break;
             }
         }
+        for (volatile uint32_t d = 0U; d < 8000U; d++) { __NOP(); }
     }
+    return s_gw_i2c_online;
+}
+
+void GrayscaleSensor_Init(void)
+{
+    (void)GrayscaleSensor_Probe();
 
     /* 若 Ping 成功，预读一次 8 路数字量 */
     if (s_gw_i2c_online) {
@@ -288,8 +305,13 @@ uint8_t GrayscaleSensor_ReadMask(void)
 
 bool GrayscaleSensor_ReadAnalog(uint8_t analog_array[GRAYSCALE_SENSOR_CHANNEL_COUNT])
 {
-    if (analog_array == NULL || !s_gw_i2c_online) {
+    if (analog_array == NULL) {
         return false;
+    }
+    if (!s_gw_i2c_online) {
+        if (!GrayscaleSensor_Probe()) {
+            return false;
+        }
     }
     return Gw_I2C_ReadBytes(GW_GRAY_REG_ANALOG_BASE, analog_array, GRAYSCALE_SENSOR_CHANNEL_COUNT);
 }

@@ -80,6 +80,7 @@ def rx_thread_worker():
                             if end_idx != -1:
                                 msg = bytes(buf[:end_idx+1]).decode('ascii', errors='ignore')
                                 g_telemetry["calib_msg"] = msg
+                                g_telemetry["calib_seq"] = g_telemetry.get("calib_seq", 0) + 1
                                 buf = buf[end_idx+1:]
                                 continue
                             else:
@@ -110,7 +111,8 @@ def rx_thread_worker():
                                         "light": light_state,
                                         "car_link": link_online,
                                         "last_update": time.time(),
-                                        "calib_msg": g_telemetry.get("calib_msg", "")
+                                        "calib_msg": g_telemetry.get("calib_msg", ""),
+                                        "calib_seq": g_telemetry.get("calib_seq", 0)
                                     }
                                     g_frame_count += 1
                                     buf = buf[20:]

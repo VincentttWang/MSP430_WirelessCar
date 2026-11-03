@@ -107,6 +107,31 @@ static void AppRemoteCar_Beep(uint16_t duration_ms) {
     DL_GPIO_clearPins(Buzzer_PORT, Buzzer_PIN);
 }
 
+static void AppRemoteCar_SendCalibProbes(void)
+{
+    char resp[128];
+    uint8_t mask = GrayscaleSensor_ReadMask();
+    bool i2c_on = GrayscaleSensor_IsI2cOnline();
+    uint8_t a[GRAYSCALE_SENSOR_CHANNEL_COUNT];
+
+    if (i2c_on && GrayscaleSensor_ReadAnalog(a)) {
+        snprintf(resp, sizeof(resp), "!CAL:PROBES,%02X,1,%u,%u,%u,%u,%u,%u,%u,%u#",
+                 mask, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+    } else {
+        snprintf(resp, sizeof(resp), "!CAL:PROBES,%02X,0,%u,%u,%u,%u,%u,%u,%u,%u#",
+                 mask,
+                 ((mask >> 0) & 1U) ? 255U : 0U,
+                 ((mask >> 1) & 1U) ? 255U : 0U,
+                 ((mask >> 2) & 1U) ? 255U : 0U,
+                 ((mask >> 3) & 1U) ? 255U : 0U,
+                 ((mask >> 4) & 1U) ? 255U : 0U,
+                 ((mask >> 5) & 1U) ? 255U : 0U,
+                 ((mask >> 6) & 1U) ? 255U : 0U,
+                 ((mask >> 7) & 1U) ? 255U : 0U);
+    }
+    AppRemoteCar_SendPacket(resp);
+}
+
 static void AppRemoteCar_HandleDownKey(void) {
     char pkt[128];
     uint8_t buf[GRAYSCALE_SENSOR_CHANNEL_COUNT];
@@ -120,8 +145,11 @@ static void AppRemoteCar_HandleDownKey(void) {
         s_motion_active = false;
         strncpy((char*)s_last_action, "CALIB", sizeof(s_last_action));
         (void)Chassis_Brake();
+        JY61P_I2C_SetSuspended(true);
+        (void)GrayscaleSensor_Probe();
         AppRemoteCar_Beep(60);
         AppRemoteCar_SendPacket("!CAL:WAIT_WHITE#");
+        AppRemoteCar_SendCalibProbes();
     } else if (s_calib_state == CALIB_STATE_WAIT_WHITE) {
         /* 采集白底 */
         if (GrayscaleSensor_CalibrateSampleWhite(buf)) {
@@ -154,6 +182,7 @@ static void AppRemoteCar_HandleDownKey(void) {
         }
     } else if (s_calib_state == CALIB_STATE_DONE) {
         s_calib_state = CALIB_STATE_IDLE;
+        JY61P_I2C_SetSuspended(false);
         strncpy((char*)s_last_action, "STOP", sizeof(s_last_action));
         AppRemoteCar_SendPacket("!CAL:EXIT#");
     }
@@ -679,8 +708,11 @@ static void AppRemoteCar_ParsePacketCommand(const char *pkt, uint8_t src){
             s_motion_active = false;
             strncpy((char*)s_last_action, "CALIB", sizeof(s_last_action));
             (void)Chassis_Brake();
+            JY61P_I2C_SetSuspended(true);
+            (void)GrayscaleSensor_Probe();
             AppRemoteCar_Beep(60);
             AppRemoteCar_SendPacket("!CAL:WAIT_WHITE#");
+            AppRemoteCar_SendCalibProbes();
         } else if (strncmp(pkt + 5, "W", 1) == 0) {
             uint8_t w[GRAYSCALE_SENSOR_CHANNEL_COUNT];
             if (GrayscaleSensor_CalibrateSampleWhite(w)) {
@@ -711,15 +743,11 @@ static void AppRemoteCar_ParsePacketCommand(const char *pkt, uint8_t src){
                 AppRemoteCar_Beep(200);
                 AppRemoteCar_SendPacket("!CAL:ERR_I2C#");
             }
-        } else if (strncmp(pkt + 5, "REQ", 3) == 0 || strncmp(pkt + 5, "INFO", 4) == 0) {
-            uint8_t w[GRAYSCALE_SENSOR_CHANNEL_COUNT], b[GRAYSCALE_SENSOR_CHANNEL_COUNT];
-            uint8_t tw[GRAYSCALE_SENSOR_CHANNEL_COUNT], tb[GRAYSCALE_SENSOR_CHANNEL_COUNT];
-            GrayscaleSensor_GetCalibrationData(w, b, tw, tb);
-            snprintf(resp, sizeof(resp), "!CAL:INFO,%u,%u,%u,%u,%u,%u,%u,%u#",
-                     tw[0], tw[1], tw[2], tw[3], tw[4], tw[5], tw[6], tw[7]);
-            AppRemoteCar_SendPacket(resp);
+        } else if (strncmp(pkt + 5, "REQ", 3) == 0 || strncmp(pkt + 5, "POLL", 4) == 0 || strncmp(pkt + 5, "INFO", 4) == 0) {
+            AppRemoteCar_SendCalibProbes();
         } else if (strncmp(pkt + 5, "EXIT", 4) == 0 || strncmp(pkt + 5, "CANCEL", 6) == 0) {
             s_calib_state = CALIB_STATE_IDLE;
+            JY61P_I2C_SetSuspended(false);
             strncpy((char*)s_last_action, "STOP", sizeof(s_last_action));
             AppRemoteCar_SendPacket("!CAL:EXIT#");
         }
@@ -1030,6 +1058,15 @@ void App_RunRemoteCarTask(void){
             AppRemoteCar_HandleDownKey();
         }
 
+        /* 处于巡线校准状态时，每 100ms 自动向上位机回传 8 路探头实时状态与模拟量 */
+        if (s_calib_state != CALIB_STATE_IDLE) {
+            static uint32_t s_last_calib_stream_ms = 0U;
+            if ((now - s_last_calib_stream_ms) >= 100U) {
+                s_last_calib_stream_ms = now;
+                AppRemoteCar_SendCalibProbes();
+            }
+        }
+
         uint32_t now = BSP_Time_GetMs();
 
         /* ACT 为 RESET 保持一秒后自动回到 RESET 之前的动作状态 */
@@ -1186,6 +1223,7 @@ void App_RunRemoteCarTask(void){
                     OLED_DrawCalibrationScreen(3U, "Calibrated & Saved!");
                     if ((now - s_calib_done_ms) >= 1500U) {
                         s_calib_state = CALIB_STATE_IDLE;
+                        JY61P_I2C_SetSuspended(false);
                         strncpy((char*)s_last_action, "STOP", sizeof(s_last_action));
                     }
                 }

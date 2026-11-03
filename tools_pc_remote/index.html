@@ -12188,14 +12188,20 @@
       }
     }
 
+    let g_calibPollTimer = null;
+
     function openSensorCalibModal() {
       const modal = document.getElementById('sensorCalibModal');
       if (modal) {
         modal.style.display = 'flex';
         initCalibProbeBars();
-        /* 下发进入校准握手 */
+        /* 下发进入校准握手并启动 100ms 探头实时轮询 */
         writeSerial('!CAL:START#');
         appendLog('CAL', '打开巡线模块校准向导，已向车端发送 !CAL:START#');
+        if (g_calibPollTimer) clearInterval(g_calibPollTimer);
+        g_calibPollTimer = setInterval(() => {
+          writeSerial('!CAL:REQ#');
+        }, 100);
       }
     }
 
@@ -12203,6 +12209,10 @@
       const modal = document.getElementById('sensorCalibModal');
       if (modal) {
         modal.style.display = 'none';
+        if (g_calibPollTimer) {
+          clearInterval(g_calibPollTimer);
+          g_calibPollTimer = null;
+        }
         writeSerial('!CAL:EXIT#');
         appendLog('CAL', '退出巡线校准向导');
       }
@@ -12262,7 +12272,51 @@
 
     function onCalibPacketReceived(text) {
       if (!text) return;
-      if (text.startsWith('!CAL:WAIT_WHITE')) {
+      if (text.startsWith('!CAL:PROBES,')) {
+        // 格式: !CAL:PROBES,<mask_hex>,<i2c_online>,<v0>,...,<v7>#
+        const raw = text.replace('!CAL:PROBES,', '').replace('#', '');
+        const p = raw.split(',');
+        if (p.length >= 2) {
+          const mask = parseInt(p[0], 16) || 0;
+          const i2cOnline = (p[1] === '1');
+          const vals = p.slice(2).map(Number);
+
+          const statusElem = document.getElementById('calibSensorStatus');
+          if (statusElem) {
+            if (i2cOnline) {
+              statusElem.innerHTML = '<span style="color: #22c55e; font-weight: 600;">● 在线 (I2C 0x4C)</span> · 模拟量+数字量就绪';
+            } else {
+              statusElem.innerHTML = '<span style="color: #eab308; font-weight: 600;">● 在线 (GPIO 8路模式)</span> · I2C未响应/脱机';
+            }
+          }
+
+          for (let i = 0; i < 8; i++) {
+            const isBlack = ((mask >> i) & 1) === 1;
+            const dot = document.getElementById(`calibProbeDot_${i}`);
+            if (dot) {
+              if (isBlack) {
+                dot.style.background = '#22c55e';
+                dot.style.borderColor = '#86efac';
+                dot.style.boxShadow = '0 0 10px rgba(34, 197, 94, 0.9)';
+              } else {
+                dot.style.background = '#1e293b';
+                dot.style.borderColor = '#475569';
+                dot.style.boxShadow = 'none';
+              }
+            }
+            const thDiv = document.getElementById(`calibProbeTh_${i}`);
+            if (thDiv) {
+              if (i2cOnline && vals.length >= 8) {
+                const th = g_calibThreshVals[i] || 128;
+                thDiv.innerHTML = `<span style="font-size:11px; color:${isBlack ? '#4ade80' : '#94a3b8'};">${vals[i]}</span><span style="font-size:9px; color:#64748b; margin-left:2px;">(${th})</span>`;
+              } else {
+                thDiv.innerHTML = `<span style="font-size:11px; color:${isBlack ? '#4ade80' : '#94a3b8'};">${isBlack ? '黑线' : '白底'}</span>`;
+              }
+            }
+          }
+        }
+        return;
+      } else if (text.startsWith('!CAL:WAIT_WHITE')) {
         const msg = document.getElementById('calibResultMsg');
         if (msg) msg.innerText = '小车已就绪：请将探头置于白底，点击【采集白底基准】';
       } else if (text.startsWith('!CAL:W_OK,')) {
@@ -16521,9 +16575,11 @@
 
 
 
-        if (json.data && json.data.calib_msg && json.data.calib_msg !== window.g_lastBackendCalibMsg) {
-          window.g_lastBackendCalibMsg = json.data.calib_msg;
-          onCalibPacketReceived(json.data.calib_msg);
+        if (json.data && json.data.calib_msg) {
+          if (json.data.calib_seq !== window.g_lastBackendCalibSeq) {
+            window.g_lastBackendCalibSeq = json.data.calib_seq;
+            onCalibPacketReceived(json.data.calib_msg);
+          }
         }
 
         const portOpen = !!json.connected;

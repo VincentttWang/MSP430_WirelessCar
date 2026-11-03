@@ -102,6 +102,12 @@ typedef enum {
 void GrayscaleSensor_Init(void);
 
 /**
+ * @brief 动态探测感为 I2C 灰度从机是否在线。
+ * @return true 探测成功且在线，false 无应答/离线
+ */
+bool GrayscaleSensor_Probe(void);
+
+/**
  * @brief 查询感为 I2C 灰度传感器是否在线可用。
  * @return true 在线，false 未接或通信异常
  */
