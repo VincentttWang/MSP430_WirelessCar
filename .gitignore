@@ -1,0 +1,96 @@
+# =====================================================================
+# .gitignore for MSP430_WirelessCar
+# (MSP430F5529 + MSPM0G3507 Dual-Core Autonomous & Telemetry Smart Car)
+# =====================================================================
+
+# --------------------------------------------------
+# Non-Car Files & Coursework Labs (排除不属于无线小车的文件)
+# --------------------------------------------------
+coursework_labs/
+第*课/
+*.tmp
+*.log
+*.bak
+PROJECT_AGENT_HANDOVER.md
+
+# --------------------------------------------------
+# Internal Agent & IDE Temporary Directories
+# --------------------------------------------------
+.workbuddy/
+.gemini/
+scratch/
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --------------------------------------------------
+# Python Bytecode & Environments
+# --------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+env/
+venv/
+
+# --------------------------------------------------
+# Binary Executables & DLLs from vendor toolpacks
+# --------------------------------------------------
+*.exe
+*.dll
+*.dylib
+*.so
+
+# --------------------------------------------------
+# Temporary Inspection & Scratch Binaries
+# --------------------------------------------------
+_*.bin
+**/_*.bin
+firmware_MSP430F5529/true
+firmware_MSP430F5529/*.i1
+
+# --------------------------------------------------
+# Keil MDK-ARM (MSPM0G3507) Intermediates
+# Keep the final .axf / .hex output for zero-dependency flashing
+# --------------------------------------------------
+*.o
+*.obj
+*.crf
+*.d
+*.dep
+*.build_log.htm
+**/Objects/*.o
+**/Objects/*.d
+**/Objects/*.crf
+**/Objects/*.dep
+**/Objects/*.build_log.htm
+**/Listings/
+*.uvgui.*
+*.uvoptx.bak
+JLinkLog.txt
+
+# --------------------------------------------------
+# TI CCS / cl430 (MSP430F5529) Intermediates
+# Keep final .hex / .txt / .out for direct flashing
+# --------------------------------------------------
+**/Debug/*.obj
+**/Debug/*.d
+**/Debug/*.pp
+**/Debug/*.opt
+**/Debug/*.asm
+**/Debug/syscfg/
+
+# --------------------------------------------------
+# OS Generated Files
+# --------------------------------------------------
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.Spotlight-V100
+.Trashes

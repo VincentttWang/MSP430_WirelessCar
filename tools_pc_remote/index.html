@@ -1,0 +1,5729 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>MSP430 智能小车双模测控平台</title>
+
+  <style>
+
+    :root {
+
+      --bg-dark: #0a0e17;
+
+      --card-bg: rgba(16, 24, 39, 0.85);
+
+      --card-border: rgba(0, 242, 254, 0.2);
+
+      --primary: #00f2fe;
+
+      --primary-glow: rgba(0, 242, 254, 0.4);
+
+      --accent-green: #00e676;
+
+      --accent-green-glow: rgba(0, 230, 118, 0.4);
+
+      --accent-red: #ff3366;
+
+      --accent-red-glow: rgba(255, 51, 102, 0.4);
+
+      --accent-amber: #ffb300;
+
+      --accent-purple: #b388ff;
+
+      --text-main: #f0f4f8;
+
+      --text-muted: #8899a6;
+
+      --btn-bg: rgba(255, 255, 255, 0.06);
+
+      --btn-hover: rgba(0, 242, 254, 0.18);
+
+    }
+
+
+
+    * {
+
+      box-sizing: border-box;
+
+      margin: 0;
+
+      padding: 0;
+
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+      user-select: none;
+
+    }
+
+
+
+    body {
+
+      background-color: var(--bg-dark);
+
+      background-image: 
+
+        radial-gradient(circle at 15% 15%, rgba(0, 242, 254, 0.08) 0%, transparent 40%),
+
+        radial-gradient(circle at 85% 85%, rgba(179, 136, 255, 0.08) 0%, transparent 40%),
+
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+
+      background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
+
+      color: var(--text-main);
+
+      min-height: 100vh;
+
+      display: flex;
+
+      flex-direction: column;
+
+      overflow-x: hidden;
+
+    }
+
+
+
+    /* 顶部导航与状态条 */
+
+    header {
+
+      background: rgba(10, 14, 23, 0.9);
+
+      backdrop-filter: blur(12px);
+
+      border-bottom: 1px solid var(--card-border);
+
+      padding: 12px 24px;
+
+      display: flex;
+
+      justify-content: space-between;
+
+      align-items: center;
+
+      position: sticky;
+
+      top: 0;
+
+      z-index: 100;
+
+    }
+
+
+
+    .brand {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 14px;
+
+      min-width: 0;     /* 窗口变窄时先让标题区收缩，不要把右侧整组挤出屏幕 */
+
+    }
+
+
+
+    .logo-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, rgba(13, 27, 42, 0.9) 0%, rgba(10, 25, 47, 0.95) 100%);
+      border: 1.5px solid rgba(0, 242, 254, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 18px rgba(0, 242, 254, 0.3), inset 0 0 10px rgba(0, 242, 254, 0.15);
+      transition: all 0.3s ease;
+    }
+    .logo-badge:hover {
+      border-color: #00f2fe;
+      transform: scale(1.05);
+      box-shadow: 0 0 24px rgba(0, 242, 254, 0.5);
+    }
+
+
+
+    .brand-title h1 {
+
+      font-size: 18px;
+
+      font-weight: 700;
+
+      letter-spacing: 0.5px;
+
+      background: linear-gradient(90deg, #ffffff, #00f2fe);
+
+      -webkit-background-clip: text;
+
+      -webkit-text-fill-color: transparent;
+
+    }
+
+
+
+    .brand-title p {
+
+      font-size: 12px;
+
+      color: var(--text-muted);
+
+    }
+
+
+
+    .conn-deck {
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: flex-end;
+
+      gap: 10px;
+
+      background: rgba(255, 255, 255, 0.04);
+
+      padding: 6px 14px;
+
+      border-radius: 30px;
+
+      border: 1px solid rgba(255, 255, 255, 0.08);
+
+      /* 整组往左让一点：COM 下拉框不再贴着窗口右边缘 */
+
+      margin-right: 26px;
+
+    }
+
+
+
+    /* 三个子元素全部定宽（端口框 max-width、状态胶囊 190px、按钮 196px），
+
+     * 所以整组的宽度只取决于"下拉框是否显示"，与里面的文字长短无关。
+
+     * 否则遥测里的 (xxms) 从 "8ms" 跳到 "145ms" 时，状态胶囊变宽，
+
+     * 整组往左撑开 —— 左边的 COM 下拉框就会跟着左右挪。
+
+     * flex: 0 0 auto 保证窗口变窄时它们也不会被压缩改宽。 */
+
+    .conn-deck > * {
+
+      flex: 0 0 auto;
+
+    }
+
+
+
+    .status-pill {
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+      gap: 8px;
+
+      width: 190px;             /* 定宽：与文案长度解耦 */
+
+      font-size: 13px;
+
+      font-weight: 600;
+
+      padding: 4px 10px;
+
+      border-radius: 16px;
+
+      background: rgba(255, 51, 102, 0.15);
+
+      color: var(--accent-red);
+
+      border: 1px solid rgba(255, 51, 102, 0.3);
+
+      transition: all 0.3s ease;
+
+    }
+
+
+
+    /* 文案再长也只是省略号，不会把胶囊撑开 */
+
+    #statusText {
+
+      min-width: 0;
+
+      overflow: hidden;
+
+      text-overflow: ellipsis;
+
+      white-space: nowrap;
+
+      font-variant-numeric: tabular-nums;   /* 数字等宽，ms 变化时文字内部也不抖 */
+
+    }
+
+
+
+    .status-pill.online {
+
+      background: rgba(0, 230, 118, 0.15);
+
+      color: var(--accent-green);
+
+      border-color: rgba(0, 230, 118, 0.3);
+
+      box-shadow: 0 0 12px var(--accent-green-glow);
+
+    }
+
+
+
+    .pulse-dot {
+
+      flex: 0 0 auto;
+
+      width: 8px;
+
+      height: 8px;
+
+      border-radius: 50%;
+
+      background: currentColor;
+
+      box-shadow: 0 0 8px currentColor;
+
+      animation: pulse 1.6s infinite;
+
+    }
+
+
+
+    @keyframes pulse {
+
+      0%, 100% { opacity: 1; transform: scale(1); }
+
+      50% { opacity: 0.4; transform: scale(0.85); }
+
+    }
+
+
+
+    .port-select {
+
+      background: rgba(16, 24, 39, 0.9);
+
+      border: 1px solid var(--primary);
+
+      color: var(--text-main);
+
+      padding: 6px 10px;
+
+      border-radius: 14px;
+
+      font-size: 12px;
+
+      outline: none;
+
+      display: none;
+
+      width: 190px;             /* 定宽：端口描述长短不一也不会带动整组左右挪 */
+
+    }
+
+
+
+    .btn-connect {
+
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+
+      color: #05101a;
+
+      border: none;
+
+      font-size: 13px;
+
+      font-weight: 700;
+
+      padding: 8px 12px;
+
+      border-radius: 20px;
+
+      cursor: pointer;
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;      /* 定宽后文案居中 */
+
+      gap: 6px;
+
+      width: 196px;                 /* 定宽："连接串口 (Web Serial)" ↔ "断开串口" 不改变宽度 */
+
+      white-space: nowrap;
+
+      transition: all 0.25s ease;
+
+      box-shadow: 0 0 12px var(--primary-glow);
+
+    }
+
+
+
+    .btn-connect:hover {
+
+      transform: translateY(-1px);
+
+      box-shadow: 0 0 18px rgba(0, 242, 254, 0.7);
+
+    }
+
+
+
+    .btn-connect.connected {
+
+      background: rgba(255, 51, 102, 0.2);
+
+      color: var(--accent-red);
+
+      border: 1px solid var(--accent-red);
+
+      box-shadow: none;
+
+    }
+
+
+
+    .btn-connect.connected:hover {
+
+      background: var(--accent-red);
+
+      color: #fff;
+
+    }
+
+
+
+    /* 主网格布局 */
+
+    main {
+
+      flex: 1;
+
+      padding: 16px 24px;
+
+      display: grid;
+
+      grid-template-columns: 340px 1fr 360px;
+
+      gap: 16px;
+
+      max-width: 1540px;
+
+      margin: 0 auto;
+
+      width: 100%;
+
+    }
+
+
+
+    .panel {
+
+      background: var(--card-bg);
+
+      backdrop-filter: blur(10px);
+
+      border: 1px solid var(--card-border);
+
+      border-radius: 16px;
+
+      padding: 18px;
+
+      display: flex;
+
+      flex-direction: column;
+
+      gap: 14px;
+
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+      position: relative;
+
+    }
+
+
+
+    .panel-header {
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: space-between;
+
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+      padding-bottom: 10px;
+
+    }
+
+
+
+    .panel-title {
+
+      font-size: 14px;
+
+      font-weight: 700;
+
+      color: #c9d6df;
+
+      text-transform: uppercase;
+
+      letter-spacing: 1px;
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 8px;
+
+    }
+
+
+
+    .panel-title::before {
+
+      content: "";
+
+      width: 4px;
+
+      height: 14px;
+
+      background: var(--primary);
+
+      border-radius: 2px;
+
+      box-shadow: 0 0 8px var(--primary);
+
+    }
+
+
+
+    /* 罗盘与仪表组件 */
+
+    .compass-box {
+
+      display: flex;
+
+      flex-direction: column;
+
+      align-items: center;
+
+      justify-content: center;
+
+      padding: 6px 0;
+
+    }
+
+
+
+    .compass-dial {
+
+      width: 180px;
+
+      height: 180px;
+
+      position: relative;
+
+      border-radius: 50%;
+
+      background: radial-gradient(circle, rgba(16, 24, 39, 0.9) 0%, rgba(5, 8, 14, 0.95) 100%);
+
+      border: 2px solid rgba(0, 242, 254, 0.3);
+
+      box-shadow: 0 0 24px rgba(0, 242, 254, 0.15), inset 0 0 20px rgba(0, 0, 0, 0.8);
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+    }
+
+
+
+    .compass-needle-ring {
+
+      position: absolute;
+
+      width: 100%;
+
+      height: 100%;
+
+      top: 0;
+
+      left: 0;
+
+      transition: transform 0.08s linear;
+
+    }
+
+
+
+    .compass-val {
+
+      position: absolute;
+
+      text-align: center;
+
+      z-index: 2;
+
+    }
+
+
+
+    .compass-val .deg {
+
+      font-size: 26px;
+
+      font-weight: 800;
+
+      color: #fff;
+
+      font-family: "Consolas", monospace;
+
+      text-shadow: 0 0 10px var(--primary);
+
+    }
+
+
+
+    .compass-val .sub {
+
+      font-size: 11px;
+
+      color: var(--primary);
+
+      text-transform: uppercase;
+
+      letter-spacing: 1px;
+
+    }
+
+
+
+    /* 关键遥测指标网格 */
+
+    .metric-grid {
+
+      display: grid;
+
+      grid-template-columns: 1fr 1fr;
+
+      gap: 12px;
+
+    }
+
+
+
+    .metric-card {
+
+      background: rgba(255, 255, 255, 0.03);
+
+      border: 1px solid rgba(255, 255, 255, 0.07);
+
+      border-radius: 12px;
+
+      padding: 12px;
+
+      display: flex;
+
+      flex-direction: column;
+
+      gap: 4px;
+
+      transition: all 0.25s ease;
+
+    }
+
+
+
+    .metric-card:hover {
+
+      border-color: rgba(0, 242, 254, 0.4);
+
+      background: rgba(0, 242, 254, 0.03);
+
+    }
+
+
+
+    .metric-label {
+
+      font-size: 12px;
+
+      color: var(--text-muted);
+
+      display: flex;
+
+      justify-content: space-between;
+
+    }
+
+
+
+    .metric-value {
+
+      font-size: 22px;
+
+      font-weight: 800;
+
+      font-family: "Consolas", monospace;
+
+      color: #ffffff;
+
+      letter-spacing: -0.5px;
+
+    }
+
+
+
+    .metric-unit {
+
+      font-size: 12px;
+
+      font-weight: 400;
+
+      color: var(--text-muted);
+
+      margin-left: 2px;
+
+    }
+
+
+
+    /* 交通灯指示器 */
+
+    .traffic-box {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 12px;
+
+      padding: 10px 14px;
+
+      background: rgba(0, 0, 0, 0.3);
+
+      border-radius: 12px;
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+    }
+
+
+
+    .traffic-light-orb {
+
+      width: 22px;
+
+      height: 22px;
+
+      border-radius: 50%;
+
+      background: #333;
+
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+
+      transition: all 0.3s ease;
+
+    }
+
+
+
+    .traffic-light-orb.red {
+
+      background: var(--accent-red);
+
+      box-shadow: 0 0 16px var(--accent-red), inset 0 0 6px #fff;
+
+    }
+
+
+
+    .traffic-light-orb.green {
+
+      background: var(--accent-green);
+
+      box-shadow: 0 0 16px var(--accent-green), inset 0 0 6px #fff;
+
+    }
+
+
+
+    .traffic-desc {
+
+      flex: 1;
+
+      display: flex;
+
+      flex-direction: column;
+
+    }
+
+
+
+    .traffic-desc .status {
+
+      font-size: 13px;
+
+      font-weight: 700;
+
+    }
+
+
+
+    /* 操控面板 (中列) */
+
+    .center-col {
+
+      display: flex;
+
+      flex-direction: column;
+
+      gap: 16px;
+
+    }
+
+
+
+    .ctrl-deck {
+
+      display: flex;
+
+      flex-direction: column;
+
+      align-items: center;
+
+      gap: 12px;
+
+      padding: 16px 0;
+
+    }
+
+
+
+    .dpad-row {
+
+      display: flex;
+
+      gap: 12px;
+
+    }
+
+
+
+    .dpad-btn {
+
+      width: 80px;
+
+      height: 80px;
+
+      background: var(--btn-bg);
+
+      border: 1px solid rgba(255, 255, 255, 0.12);
+
+      border-radius: 18px;
+
+      color: var(--text-main);
+
+      font-size: 14px;
+
+      font-weight: 700;
+
+      display: flex;
+
+      flex-direction: column;
+
+      align-items: center;
+
+      justify-content: center;
+
+      cursor: pointer;
+
+      transition: all 0.15s ease;
+
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+    }
+
+
+
+    .dpad-btn span.key {
+
+      font-size: 11px;
+
+      color: var(--primary);
+
+      margin-top: 2px;
+
+    }
+
+
+
+    .dpad-btn:hover {
+
+      background: var(--btn-hover);
+
+      border-color: var(--primary);
+
+      transform: translateY(-2px);
+
+      box-shadow: 0 0 16px var(--primary-glow);
+
+    }
+
+
+
+    .dpad-btn:active, .dpad-btn.active {
+
+      transform: translateY(1px);
+
+      background: var(--primary);
+
+      color: #05101a;
+
+      box-shadow: 0 0 20px var(--primary);
+
+    }
+
+
+
+    .dpad-btn.brake {
+
+      background: rgba(255, 51, 102, 0.15);
+
+      border-color: rgba(255, 51, 102, 0.4);
+
+      color: var(--accent-red);
+
+    }
+
+
+
+    .dpad-btn.brake:hover {
+
+      background: var(--accent-red);
+
+      color: #fff;
+
+      box-shadow: 0 0 18px var(--accent-red-glow);
+
+    }
+
+
+
+    .dpad-btn.brake:active, .dpad-btn.brake.active {
+
+      background: #ff0044;
+
+      color: #fff;
+
+    }
+
+
+
+    /* 动力限速滑块区 */
+
+    .slider-box {
+
+      background: rgba(0, 0, 0, 0.25);
+
+      border-radius: 12px;
+
+      padding: 14px 18px;
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      display: flex;
+
+      flex-direction: column;
+
+      gap: 10px;
+
+    }
+
+
+
+    .slider-header {
+
+      display: flex;
+
+      justify-content: space-between;
+
+      align-items: center;
+
+    }
+
+
+
+    .slider-header span.val {
+
+      font-size: 20px;
+
+      font-weight: 800;
+
+      color: var(--accent-amber);
+
+      font-family: "Consolas", monospace;
+
+    }
+
+
+
+    input[type=range] {
+
+      -webkit-appearance: none;
+
+      width: 100%;
+
+      height: 8px;
+
+      border-radius: 4px;
+
+      background: rgba(255, 255, 255, 0.15);
+
+      outline: none;
+
+      transition: background 0.2s;
+
+    }
+
+
+
+    input[type=range]::-webkit-slider-thumb {
+
+      -webkit-appearance: none;
+
+      appearance: none;
+
+      width: 22px;
+
+      height: 22px;
+
+      border-radius: 50%;
+
+      background: var(--primary);
+
+      cursor: pointer;
+
+      box-shadow: 0 0 12px var(--primary);
+
+      transition: all 0.2s;
+
+    }
+
+
+
+    input[type=range]::-webkit-slider-thumb:hover {
+
+      transform: scale(1.2);
+
+    }
+
+
+
+    .quick-preset-row {
+
+      display: flex;
+
+      justify-content: space-between;
+
+      gap: 8px;
+
+    }
+
+
+
+    .btn-preset {
+
+      flex: 1;
+
+      padding: 6px 0;
+
+      border-radius: 8px;
+
+      background: rgba(255, 255, 255, 0.05);
+
+      border: 1px solid rgba(255, 255, 255, 0.08);
+
+      color: var(--text-muted);
+
+      font-size: 12px;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+      transition: all 0.2s;
+
+    }
+
+
+
+    .btn-preset:hover {
+
+      background: rgba(0, 242, 254, 0.15);
+
+      color: var(--primary);
+
+      border-color: var(--primary);
+
+    }
+
+
+
+    /* 工况与模式双端控制区样式 */
+
+    .mode-control-deck {
+
+      display: flex;
+
+      flex-direction: column;
+
+      gap: 10px;
+
+      margin-bottom: 12px;
+
+    }
+
+
+
+    .control-row {
+
+      display: grid;
+
+      grid-template-columns: 1fr 1fr;
+
+      gap: 10px;
+
+    }
+
+
+
+    .status-btn {
+
+      background: rgba(255, 255, 255, 0.04);
+
+      border: 1px solid rgba(255, 255, 255, 0.1);
+
+      border-radius: 12px;
+
+      padding: 11px 12px;
+
+      color: var(--text-main);
+
+      cursor: pointer;
+
+      display: flex;
+
+      flex-direction: column;
+
+      align-items: center;
+
+      justify-content: center;
+
+      gap: 4px;
+
+      transition: all 0.25s ease;
+
+      user-select: none;
+
+    }
+
+
+
+    .status-btn:hover {
+
+      background: rgba(255, 255, 255, 0.08);
+
+      border-color: rgba(255, 255, 255, 0.25);
+
+      transform: translateY(-1px);
+
+    }
+
+
+
+    .status-btn .btn-title {
+
+      font-size: 13px;
+
+      font-weight: 700;
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 6px;
+
+    }
+
+
+
+    .status-btn .btn-sub {
+
+      font-size: 11px;
+
+      color: var(--text-muted);
+
+    }
+
+
+
+    /* 激活高亮状态 */
+
+    .status-btn.active-run {
+
+      background: rgba(0, 230, 118, 0.16) !important;
+
+      border-color: var(--accent-green) !important;
+
+      box-shadow: 0 0 16px var(--accent-green-glow);
+
+    }
+
+    .status-btn.active-run .btn-title {
+
+      color: var(--accent-green);
+
+    }
+
+
+
+    .status-btn.active-stop {
+
+      background: rgba(255, 51, 102, 0.16) !important;
+
+      border-color: var(--accent-red) !important;
+
+      box-shadow: 0 0 16px var(--accent-red-glow);
+
+    }
+
+    .status-btn.active-stop .btn-title {
+
+      color: var(--accent-red);
+
+    }
+
+
+
+    .status-btn.active-track {
+
+      background: rgba(0, 242, 254, 0.16) !important;
+
+      border-color: var(--primary) !important;
+
+      box-shadow: 0 0 16px var(--primary-glow);
+
+    }
+
+    .status-btn.active-track .btn-title {
+
+      color: var(--primary);
+
+    }
+
+
+
+    .status-btn.active-manual {
+
+      background: rgba(179, 136, 255, 0.16) !important;
+
+      border-color: var(--accent-purple) !important;
+
+      box-shadow: 0 0 16px rgba(179, 136, 255, 0.4);
+
+    }
+
+    .status-btn.active-manual .btn-title {
+
+      color: var(--accent-purple);
+
+    }
+
+
+
+    /* 辅助功能按键组 */
+
+    .aux-deck {
+
+      display: grid;
+
+      grid-template-columns: repeat(3, 1fr);
+
+      gap: 10px;
+
+    }
+
+
+
+    .btn-aux {
+
+      padding: 10px 0;
+
+      background: rgba(255, 255, 255, 0.05);
+
+      border: 1px solid rgba(255, 255, 255, 0.1);
+
+      border-radius: 10px;
+
+      color: var(--text-main);
+
+      font-size: 13px;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+      transition: all 0.2s ease;
+
+      display: flex;
+
+      flex-direction: column;
+
+      align-items: center;
+
+      gap: 3px;
+
+    }
+
+
+
+    .btn-aux span.key {
+
+      font-size: 11px;
+
+      color: var(--text-muted);
+
+    }
+
+
+
+    .btn-aux:hover {
+
+      background: rgba(0, 242, 254, 0.12);
+
+      border-color: var(--primary);
+
+      color: var(--primary);
+
+    }
+
+
+
+    .btn-aux:active {
+
+      transform: scale(0.96);
+
+    }
+
+
+
+    /* 实时示波波形面板 */
+
+    .scope-box {
+
+      flex: 1;
+
+      background: rgba(5, 8, 14, 0.6);
+
+      border-radius: 12px;
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      overflow: hidden;
+
+      position: relative;
+
+      display: flex;
+
+      flex-direction: column;
+
+    }
+
+
+
+    canvas#chartCanvas {
+
+      width: 100%;
+
+      height: 100%;
+
+      display: block;
+
+    }
+
+
+
+    /* 终端日志控制台 */
+
+    .log-box {
+
+      height: 160px;
+
+      background: rgba(0, 0, 0, 0.45);
+
+      border-radius: 10px;
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      padding: 8px 12px;
+
+      font-family: "Consolas", monospace;
+
+      font-size: 11px;
+
+      color: #90a4ae;
+
+      overflow-y: auto;
+
+      line-height: 1.5;
+
+    }
+
+
+
+    .log-line {
+
+      display: flex;
+
+      gap: 8px;
+
+    }
+
+
+
+    .log-line .time {
+
+      color: var(--text-muted);
+
+    }
+
+
+
+    .log-line .tag {
+
+      color: var(--primary);
+
+      font-weight: 700;
+
+    }
+
+
+
+    .log-line .msg {
+
+      color: #cfd8dc;
+
+    }
+
+
+
+    /* ── 行驶轨迹地图（航位推算） ── */
+
+    .map-wrap {
+
+      position: relative;
+
+      flex: 1;
+
+      min-height: 240px;
+
+      border-radius: 12px;
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      background: #05080e;
+
+      overflow: hidden;
+
+      cursor: grab;
+
+      touch-action: none;
+
+    }
+
+
+
+    .map-wrap.dragging {
+
+      cursor: grabbing;
+
+    }
+
+
+
+    canvas#trajCanvas {
+
+      display: block;
+
+      width: 100%;
+
+      height: 100%;
+
+    }
+
+
+
+    .map-hint {
+
+      position: absolute;
+
+      left: 10px;
+
+      bottom: 8px;
+
+      font-size: 10px;
+
+      color: rgba(136, 153, 166, 0.85);
+
+      background: rgba(0, 0, 0, 0.35);
+
+      padding: 3px 8px;
+
+      border-radius: 8px;
+
+      pointer-events: none;
+
+      letter-spacing: 0.3px;
+
+    }
+
+
+
+    .map-tools {
+
+      display: flex;
+
+      gap: 6px;
+
+      align-items: center;
+
+      flex-wrap: wrap;
+
+      justify-content: flex-end;
+
+    }
+
+
+
+    .map-tools .btn-preset {
+
+      flex: 0 0 auto;
+
+      padding: 4px 10px;
+
+      font-size: 11px;
+
+      white-space: nowrap;
+
+    }
+
+
+
+    .map-tools .btn-preset.on {
+
+      background: rgba(0, 242, 254, 0.18);
+
+      border-color: var(--primary);
+
+      color: var(--primary);
+
+    }
+
+
+
+    .map-stats {
+
+      display: grid;
+
+      grid-template-columns: repeat(4, 1fr);
+
+      gap: 8px;
+
+    }
+
+
+
+    .map-stat {
+
+      background: rgba(0, 0, 0, 0.28);
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      border-radius: 10px;
+
+      padding: 6px 10px;
+
+      min-width: 0;
+
+    }
+
+
+
+    .map-stat .k {
+
+      font-size: 10px;
+
+      letter-spacing: 0.5px;
+
+      color: var(--text-muted);
+
+      white-space: nowrap;
+
+    }
+
+
+
+    .map-stat .v {
+
+      font-size: 15px;
+
+      font-weight: 800;
+
+      font-family: "Consolas", monospace;
+
+      color: #fff;
+
+      white-space: nowrap;
+
+      overflow: hidden;
+
+      text-overflow: ellipsis;
+
+    }
+
+
+
+    /* ── 自动驾驶工具条 ── */
+
+    .auto-bar {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 6px;
+
+      flex-wrap: wrap;
+
+      background: rgba(0, 0, 0, 0.25);
+
+      border: 1px solid rgba(255, 255, 255, 0.06);
+
+      border-radius: 10px;
+
+      padding: 6px 10px;
+
+    }
+
+
+
+    .auto-bar .auto-name {
+
+      font-size: 11px;
+
+      font-weight: 700;
+
+      letter-spacing: 0.5px;
+
+      color: var(--accent-purple);
+
+    }
+
+
+
+    .auto-bar .btn-preset {
+
+      flex: 0 0 auto;
+
+      padding: 4px 9px;
+
+      font-size: 11px;
+
+      white-space: nowrap;
+
+    }
+
+
+
+    .auto-bar .btn-preset.on {
+
+      background: rgba(179, 136, 255, 0.2);
+
+      border-color: var(--accent-purple);
+
+      color: var(--accent-purple);
+
+    }
+
+
+
+    .auto-bar .btn-preset.danger {
+
+      color: var(--accent-red);
+
+      border-color: rgba(255, 51, 102, 0.4);
+
+    }
+
+
+
+    .auto-bar .btn-preset.danger:hover {
+
+      background: rgba(255, 51, 102, 0.18);
+
+      border-color: var(--accent-red);
+
+    }
+
+
+
+    .auto-sel {
+
+      background: #0d1420;
+
+      color: #cfd8dc;
+
+      border: 1px solid rgba(255, 255, 255, 0.12);
+
+      border-radius: 8px;
+
+      padding: 3px 6px;
+
+      font-size: 11px;
+
+      outline: none;
+
+    }
+
+
+
+    .auto-state {
+
+      margin-left: auto;
+
+      font-size: 11px;
+
+      font-family: "Consolas", monospace;
+
+      color: var(--primary);
+
+      white-space: nowrap;
+
+    }
+
+
+
+    /* 响应式调整 */
+
+    @media (max-width: 1200px) {
+
+      main {
+
+        grid-template-columns: 1fr;
+
+      }
+
+    }
+
+  
+    /* ── 全局页面单屏锁定 (无主滚动条，按键不跑偏) ── */
+    html, body {
+      height: 100vh !important;
+      max-height: 100vh !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+
+    /* 顶部导航控制条 */
+    header {
+      flex: 0 0 auto !important;
+      height: 56px !important;
+      padding: 0 20px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      border-bottom: 1px solid var(--card-border) !important;
+      background: rgba(10, 14, 23, 0.95) !important;
+      backdrop-filter: blur(12px) !important;
+      z-index: 100 !important;
+      box-sizing: border-box !important;
+    }
+
+    /* 核心主三栏网格：中列遥控台加宽，右列适度收紧 */
+    main {
+      flex: 1 !important;
+      height: calc(100vh - 56px) !important;
+      max-height: calc(100vh - 56px) !important;
+      padding: 10px 16px 12px 16px !important;
+      display: grid !important;
+      grid-template-columns: 290px minmax(500px, 550px) 1fr !important;
+      gap: 12px !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+      width: 100% !important;
+      max-width: 1920px !important;
+      margin: 0 auto !important;
+    }
+
+    /* ── 左列：姿态罗盘 (占大比重纵向展开) + 通信日志 (紧凑精简) ── */
+    .col-left {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-imu {
+      flex: 1 1 auto !important;
+      padding: 14px 16px !important;
+      gap: 10px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-around !important;
+    }
+
+    .panel-imu .compass-box {
+      padding: 6px 0 !important;
+    }
+
+    .panel-imu .compass-dial {
+      width: 170px !important;
+      height: 170px !important;
+    }
+
+    .panel-imu .metric-grid {
+      gap: 8px !important;
+    }
+
+    .panel-imu .metric-card {
+      padding: 8px 12px !important;
+      gap: 3px !important;
+      border-radius: 10px !important;
+    }
+
+    .panel-imu .metric-label {
+      font-size: 11px !important;
+    }
+
+    .panel-imu .metric-value {
+      font-size: 19px !important;
+    }
+
+    .panel-log {
+      flex: 0 0 145px !important;
+      max-height: 145px !important;
+      min-height: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      padding: 8px 12px !important;
+      gap: 6px !important;
+      overflow: hidden !important;
+    }
+
+    .panel-log .log-box {
+      flex: 1 !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      max-height: unset !important;
+      overflow-y: auto !important;
+      margin: 0 !important;
+      border-radius: 8px !important;
+      font-size: 10.5px !important;
+      padding: 6px 10px !important;
+    }
+
+    /* ── 中列：遥控操纵台 ── */
+    .col-center {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-ctrl {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between !important;
+      padding: 12px 16px !important;
+      overflow: hidden;
+      gap: 8px;
+    }
+
+    .panel-ctrl .ctrl-deck {
+      padding: 4px 0 !important;
+      gap: 8px !important;
+    }
+
+    .panel-ctrl .dpad-row {
+      gap: 8px !important;
+    }
+
+    .panel-ctrl .dpad-btn {
+      width: 72px !important;
+      height: 72px !important;
+      border-radius: 14px !important;
+      font-size: 13px !important;
+    }
+
+    .panel-ctrl .status-btn {
+      padding: 8px 12px !important;
+      min-height: 44px !important;
+      border-radius: 10px !important;
+    }
+
+    .panel-ctrl .btn-aux {
+      padding: 6px 8px !important;
+      min-height: 38px !important;
+      border-radius: 8px !important;
+    }
+
+    /* ── 右列：上半行驶轨迹 + 下半实时示波器 ── */
+    .col-right {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .panel-traj {
+      flex: 1.45 !important;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 14px !important;
+      gap: 6px !important;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel-traj .map-wrap {
+      flex: 1 !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      border-radius: 8px !important;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .map-tools {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .map-stats-compact {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      flex: 0 0 auto;
+    }
+
+    .map-stats-compact b {
+      color: #00f2fe;
+      font-family: Consolas, monospace;
+    }
+
+    .panel-scope {
+      flex: 0.8 !important;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 8px 14px !important;
+      gap: 5px !important;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel-scope .scope-box {
+      flex: 1 !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      border-radius: 8px !important;
+      margin: 0 !important;
+      position: relative;
+    }
+
+    .scope-legend-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+    }
+
+    .btn-enlarge {
+      background: rgba(0, 242, 254, 0.12) !important;
+      border: 1px solid rgba(0, 242, 254, 0.35) !important;
+      color: #00f2fe !important;
+      padding: 2px 8px !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      border-radius: 6px !important;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-enlarge:hover {
+      background: rgba(0, 242, 254, 0.3) !important;
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.4) !important;
+      color: #fff !important;
+    }
+
+    /* ── 下拉菜单样式 ── */
+    .dropdown-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 4px;
+      background: rgba(14, 20, 32, 0.98);
+      border: 1px solid rgba(0, 242, 254, 0.35);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
+      z-index: 999;
+      min-width: 140px;
+      padding: 4px 0;
+      backdrop-filter: blur(12px);
+    }
+
+    .dropdown-menu.show {
+      display: block;
+    }
+
+    .dropdown-item {
+      padding: 7px 12px;
+      font-size: 11px;
+      color: #c9d6df;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dropdown-item:hover {
+      background: rgba(0, 242, 254, 0.18);
+      color: #fff;
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      margin: 3px 0;
+    }
+
+    /* ── 大窗全屏模态框 ── */
+    .enlarge-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(4, 7, 13, 0.88);
+      backdrop-filter: blur(16px);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .enlarge-dialog {
+      background: rgba(14, 20, 32, 0.98);
+      border: 1px solid rgba(0, 242, 254, 0.35);
+      border-radius: 16px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 242, 254, 0.15);
+      width: 92vw;
+      height: 88vh;
+      max-width: 1600px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .enlarge-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      flex: 0 0 auto;
+    }
+
+    .enlarge-title-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .enlarge-icon {
+      font-size: 22px;
+    }
+
+    .enlarge-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+
+    .enlarge-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .btn-close-modal {
+      background: rgba(255, 51, 102, 0.15);
+      border: 1px solid rgba(255, 51, 102, 0.4);
+      color: #ff3366;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-close-modal:hover {
+      background: #ff3366;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(255, 51, 102, 0.5);
+    }
+
+    .enlarge-content {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+    }
+
+    .modal-host {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .enlarge-footer {
+      padding: 10px 18px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex: 0 0 auto;
+    }
+
+    #mapWrap.in-modal, #scopeWrap.in-modal {
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 0 !important;
+      border: none !important;
+    }
+
+  
+    /* 常用动力档位胶囊按钮渲染 */
+    .speed-chips {
+      display: grid !important;
+      grid-template-columns: repeat(5, 1fr) !important;
+      gap: 8px !important;
+      margin-top: 6px !important;
+      width: 100% !important;
+    }
+
+    .chip {
+      background: rgba(255, 255, 255, 0.05) !important;
+      border: 1px solid rgba(0, 242, 254, 0.22) !important;
+      border-radius: 8px !important;
+      color: #b0bec5 !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      font-family: "Consolas", monospace !important;
+      padding: 8px 0 !important;
+      cursor: pointer !important;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+      outline: none !important;
+    }
+
+    .chip:hover {
+      background: rgba(0, 242, 254, 0.16) !important;
+      border-color: var(--primary) !important;
+      color: #fff !important;
+      transform: translateY(-1px) !important;
+      box-shadow: 0 0 12px var(--primary-glow) !important;
+    }
+
+    .chip.active {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.35) 0%, rgba(79, 172, 254, 0.25) 100%) !important;
+      border-color: #00f2fe !important;
+      color: #00f2fe !important;
+      box-shadow: 0 0 14px rgba(0, 242, 254, 0.45), inset 0 0 8px rgba(0, 242, 254, 0.2) !important;
+      font-weight: 900 !important;
+    }
+
+    /* 自动驾驶酷炫按键专属视觉 */
+    .btn-preset.btn-ai {
+      background: rgba(0, 242, 254, 0.1) !important;
+      border: 1px solid rgba(0, 242, 254, 0.35) !important;
+      color: #00f2fe !important;
+      font-weight: 700 !important;
+      padding: 4px 8px !important;
+      border-radius: 6px !important;
+      transition: all 0.2s ease !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 3px !important;
+      cursor: pointer !important;
+    }
+
+    .btn-preset.btn-ai:hover {
+      background: rgba(0, 242, 254, 0.25) !important;
+      border-color: #00f2fe !important;
+      color: #fff !important;
+      box-shadow: 0 0 12px rgba(0, 242, 254, 0.5) !important;
+      transform: translateY(-1px) !important;
+    }
+
+    /* GitHub 仓库角标导航 */
+    .header-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .repo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 6px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(0, 242, 254, 0.28);
+      border-radius: 22px;
+      color: #e2e8f0;
+      text-decoration: none;
+      font-size: 12.5px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(8px);
+    }
+
+    .repo-badge svg {
+      color: #00f2fe;
+      transition: transform 0.25s ease;
+    }
+
+    .repo-badge:hover {
+      background: rgba(0, 242, 254, 0.12);
+      border-color: #00f2fe;
+      color: #ffffff;
+      transform: translateY(-1.5px);
+      box-shadow: 0 4px 16px rgba(0, 242, 254, 0.35);
+    }
+
+    .repo-badge:hover svg {
+      transform: scale(1.15) rotate(-5deg);
+    }
+
+    .repo-badge .repo-name {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-weight: 600;
+    }
+
+    .repo-badge .repo-tag {
+      background: rgba(0, 242, 254, 0.16);
+      color: #00f2fe;
+      border: 1px solid rgba(0, 242, 254, 0.3);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+
+
+  <!-- 顶部状态栏 -->
+  <header>
+    <div class="brand">
+      <div class="logo-badge" title="MSP430 & MSPM0 智能网联测控小车">
+        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="cyberCarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#00f2fe"/>
+              <stop offset="100%" stop-color="#4facfe"/>
+            </linearGradient>
+            <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="1.2" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+          <path d="M3 20.5C4.2 16.5 6.8 14.5 10.5 13.5L14.8 8.5C16.8 7 21.2 7 23.2 9L27.2 13.8C28.8 15.8 29.5 18 29.5 20.8L28.5 22.2C28.5 23.2 27.2 23.8 25.8 23.8C24.5 21.2 21.8 21.2 20.5 23.8H11.5C10.2 21.2 7.5 21.2 6.2 23.8C4.8 23.8 3 23.2 3 22.2Z" fill="url(#cyberCarGrad)" fill-opacity="0.25" stroke="url(#cyberCarGrad)" stroke-width="1.6" stroke-linejoin="round" filter="url(#neonGlow)"/>
+          <path d="M12.2 13.5L15.2 10.2C16.2 9.2 20.2 9.2 21.5 10.5L24.5 13.5H12.2Z" fill="#00f2fe" fill-opacity="0.85"/>
+          <circle cx="8.2" cy="22.8" r="2.8" fill="#0a0e17" stroke="#00f2fe" stroke-width="1.5"/>
+          <circle cx="8.2" cy="22.8" r="1.1" fill="#ffffff"/>
+          <circle cx="23.2" cy="22.8" r="2.8" fill="#0a0e17" stroke="#00f2fe" stroke-width="1.5"/>
+          <circle cx="23.2" cy="22.8" r="1.1" fill="#ffffff"/>
+          <path d="M26.5 17.5L30 18" stroke="#ff3366" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M1.5 17L4 17" stroke="#00f2fe" stroke-width="1.3" stroke-linecap="round" opacity="0.8"/>
+          <path d="M0.5 19.5L2.8 19.5" stroke="#00f2fe" stroke-width="1.3" stroke-linecap="round" opacity="0.6"/>
+        </svg>
+      </div>
+      <div class="brand-title">
+        <h1>MSP430 智能小车双模测控平台</h1>
+      </div>
+    </div>
+
+    <!-- 第一行中间：GitHub 仓库信息与链接 -->
+    <div class="header-center">
+      <a href="https://github.com/VincentttWang/MSP430_WirelessCar" target="_blank" rel="noopener noreferrer" class="repo-badge" title="前往 GitHub 开源仓库: VincentttWang/MSP430_WirelessCar">
+        <svg height="17" width="17" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        <span class="repo-name">VincentttWang / MSP430_WirelessCar</span>
+        <span class="repo-tag">GitHub</span>
+      </a>
+    </div>
+
+    <div class="conn-deck">
+
+      <select id="backendPortSelect" class="port-select"></select>
+
+      <div id="statusPill" class="status-pill">
+
+        <span class="pulse-dot"></span>
+
+        <span id="statusText">等待连接</span>
+
+      </div>
+
+      <button id="btnConnect" class="btn-connect" onclick="toggleConnection()">
+
+        <span id="btnIcon">⚡</span>
+
+        <span id="btnLabel">连接串口 (Web Serial)</span>
+
+      </button>
+
+    </div>
+
+  </header>
+
+
+
+  <!-- 核心主网格 -->
+
+    <!-- 核心主网格 (全新3栏黄金布局，单屏自适应无滚动) -->
+  <main>
+    <!-- 左列：惯导姿态与罗盘仪 (上中) + 遥控通信日志 (下) -->
+    <div class="col-left">
+      <!-- 惯导与姿态状态仪表 -->
+      <div class="panel panel-imu">
+        <div class="panel-header">
+          <div class="panel-title">惯导姿态与罗盘仪</div>
+          <span style="font-size: 11px; color: var(--text-muted);">JY61P (I2C0)</span>
+        </div>
+
+        <!-- 360° 罗盘仪 -->
+        <div class="compass-box">
+          <div class="compass-dial">
+            <svg class="compass-needle-ring" id="compassRing" viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="92" fill="none" stroke="rgba(0, 242, 254, 0.2)" stroke-width="1.5" />
+              <circle cx="100" cy="100" r="82" fill="none" stroke="rgba(255, 255, 255, 0.05)" stroke-width="1" />
+              <text x="100" y="24" fill="#ff3366" font-size="12" font-weight="900" text-anchor="middle">N</text>
+              <text x="100" y="184" fill="#8899a6" font-size="11" font-weight="700" text-anchor="middle">S</text>
+              <text x="180" y="104" fill="#8899a6" font-size="11" font-weight="700" text-anchor="middle">E</text>
+              <text x="20" y="104" fill="#8899a6" font-size="11" font-weight="700" text-anchor="middle">W</text>
+              <polygon points="100,32 105,95 95,95" fill="#ff3366" />
+              <polygon points="100,168 105,105 95,105" fill="#4a5568" />
+              <circle cx="100" cy="100" r="7" fill="#00f2fe" />
+              <circle cx="100" cy="100" r="3" fill="#ffffff" />
+            </svg>
+            <div class="compass-val">
+              <div class="deg" id="valYaw">+000.0°</div>
+              <div class="sub">航向角 (YAW)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 关键遥测指标 4 格 -->
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-label">
+              <span>实时线速度</span>
+              <span>SPD</span>
+            </div>
+            <div class="metric-value">
+              <span id="valSpeed">0.00</span><span class="metric-unit">m/s</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">
+              <span>累计行驶里程</span>
+              <span>DIST</span>
+            </div>
+            <div class="metric-value">
+              <span id="valDist">0.00</span><span class="metric-unit">m</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-label">
+              <span>动态净加速度</span>
+              <span>ACC</span>
+            </div>
+            <div class="metric-value">
+              <span id="valAcc">0.00</span><span class="metric-unit">g</span>
+            </div>
+          </div>
+
+          <div class="metric-card" style="cursor: pointer;" onclick="toggleRunStop()" title="点击可快速切换 启动/急停">
+            <div class="metric-label">
+              <span>运行工况状态 (点击切换)</span>
+              <span>STATE</span>
+            </div>
+            <div class="metric-value" style="font-size: 16px;" id="valState">
+              <span style="color: var(--accent-red); font-weight: 800;">⏹ STOP (停止)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 遥测与通信监控日志 (填补左栏下半空间) -->
+      <div class="panel panel-log">
+        <div class="panel-header">
+          <div class="panel-title">遥控通信日志</div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-preset" style="padding: 2px 8px; font-size: 10px;" onclick="showMobileUrl()">📱 手机手柄</button>
+            <button class="btn-preset" style="padding: 2px 8px; font-size: 10px;" onclick="clearLogs()">清空</button>
+          </div>
+        </div>
+        <div id="logBox" class="log-box">
+          <div class="log-line">
+            <span class="time">[INIT]</span>
+            <span class="tag">SYS</span>
+            <span class="msg">测控工作站已就绪，所有功能全屏集成完毕。</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中列：小车运动遥控台 (单独一整列) -->
+    <div class="col-center">
+      <div class="panel panel-ctrl">
+        <div class="panel-header">
+          <div class="panel-title">小车运动遥控台</div>
+          <span style="font-size: 11px; color: var(--text-muted);">全向 WASD 键位响应</span>
+        </div>
+
+        <!-- 操纵按键十字区域 -->
+        <div class="ctrl-deck">
+          <div class="dpad-row">
+            <button id="btnW" class="dpad-btn" onmousedown="setDirKey('w',true)" onmouseup="setDirKey('w',false)">
+              <span>▲ 前进</span>
+              <span class="key">W</span>
+            </button>
+          </div>
+          <div class="dpad-row">
+            <button id="btnA" class="dpad-btn" onmousedown="setDirKey('a',true)" onmouseup="setDirKey('a',false)">
+              <span>◀ 左转</span>
+              <span class="key">A</span>
+            </button>
+            <button id="btnSpace" class="dpad-btn brake" onclick="stopAll()">
+              <span>● 制动</span>
+              <span class="key">SPACE</span>
+            </button>
+            <button id="btnD" class="dpad-btn" onmousedown="setDirKey('d',true)" onmouseup="setDirKey('d',false)">
+              <span>右转 ▶</span>
+              <span class="key">D</span>
+            </button>
+          </div>
+          <div class="dpad-row">
+            <button id="btnS" class="dpad-btn" onmousedown="setDirKey('s',true)" onmouseup="setDirKey('s',false)">
+              <span>▼ 后退</span>
+              <span class="key">S</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 动力限速滑块 -->
+        <div class="slider-box">
+          <div class="slider-header">
+            <span>当前动力输出限速</span>
+            <span class="slider-val" id="speedDisplay">50%</span>
+          </div>
+          <input type="range" min="5" max="100" value="50" id="speedSlider" oninput="onSpeedSlider(this.value)">
+          <div class="speed-chips">
+            <button class="chip" data-pct="5" onclick="setSpeedPreset(5)">5%</button>
+            <button class="chip" data-pct="25" onclick="setSpeedPreset(25)">25%</button>
+            <button class="chip active" data-pct="50" onclick="setSpeedPreset(50)">50%</button>
+            <button class="chip" data-pct="75" onclick="setSpeedPreset(75)">75%</button>
+            <button class="chip" data-pct="100" onclick="setSpeedPreset(100)">100%</button>
+          </div>
+        </div>
+
+        <!-- 运行工况按键组 (RUN / STOP) -->
+        <div class="control-row">
+          <button id="btnRun" class="status-btn" onclick="setRunState(true)">
+            <span class="btn-title">▶ 启动运行 (RUN)</span>
+            <span class="btn-sub">按键 1 / 开启使能</span>
+          </button>
+          <button id="btnStop" class="status-btn" onclick="setRunState(false)">
+            <span class="btn-title">⏹ 急停待命 (STOP)</span>
+            <span class="btn-sub">空格 Space / 全局刹车</span>
+          </button>
+        </div>
+
+        <!-- 模式切换按键组 -->
+        <div class="control-row">
+          <button id="btnModeTrack" class="status-btn" onclick="switchMode('TRACK')">
+            <span class="btn-title">🚗 循线模式</span>
+            <span class="btn-sub">按键 T / 自动循线</span>
+          </button>
+          <button id="btnModeManual" class="status-btn" onclick="switchMode('MANUAL')">
+            <span class="btn-title">🎮 遥控模式</span>
+            <span class="btn-sub">按键 M / 遥控待命</span>
+          </button>
+        </div>
+
+        <!-- 辅助功能按键组 -->
+        <div class="aux-deck">
+          <button class="btn-aux" onclick="sendCmd('1')">
+            <span>双端启停联动</span>
+            <span class="key">按键 1 / MSP430 S1</span>
+          </button>
+          <button class="btn-aux" onclick="onClearOdo()">
+            <span>里程航向清零</span>
+            <span class="key">按键 2 / MSP430 S2</span>
+          </button>
+          <button class="btn-aux" onclick="resetTrackingPid()">
+            <span>循线 PID 优化</span>
+            <span class="key">参数校准</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右列：上半行驶轨迹 (50%) + 下半实时示波器 (50%) -->
+    <div class="col-right">
+      <!-- 上半：行驶轨迹地图 -->
+      <div class="panel panel-traj">
+        <div class="panel-header">
+          <div class="panel-title">行驶轨迹 · 航位推算</div>
+          <div class="map-tools">
+            <button class="btn-preset btn-ai" onclick="routeSave()" title="记忆当前行驶的轨迹点集">💾 记忆路线</button>
+            <button class="btn-preset btn-ai" onclick="autoReturn()" title="沿当前记忆路线原路自主反向返航">↩️ 原路返回</button>
+            <button class="btn-preset btn-ai" onclick="autoReplay()" title="自动循迹重新正向行驶">🔁 原路回放</button>
+            <button id="trajAuto" class="btn-preset on" onclick="trajToggleAuto()">自适应</button>
+            <button class="btn-preset" onclick="trajReset(true)">清空</button>
+            <div class="dropdown-wrap" id="trajDropWrap">
+              <button class="btn-preset" onclick="toggleTrajDropdown(event)">操作 ▾</button>
+              <div id="trajDropMenu" class="dropdown-menu">
+                <div class="dropdown-item" onclick="trajExportCsv()">📊 导出 CSV 轨迹数据</div>
+                <div class="dropdown-item" onclick="trajExportPng()">🖼️ 导出 PNG 轨迹截图</div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" onclick="openEnlargeModal('traj')">🔍 展开大窗查看模式</div>
+              </div>
+            </div>
+            <button class="btn-preset btn-enlarge" onclick="openEnlargeModal('traj')" title="点击进入大窗查看模式">🔍 放大</button>
+          </div>
+        </div>
+
+        <div class="map-wrap" id="mapWrap" ondblclick="openEnlargeModal('traj')" title="双击或点击右上角放大进入大窗模式">
+          <canvas id="trajCanvas"></canvas>
+          <div class="map-hint">滚轮缩放 · 拖动平移 · 双击放大查看</div>
+        </div>
+
+        <!-- 隐藏的完整自动驾驶控制栏 (在大窗模式下展示) -->
+        <div class="auto-bar" id="autoBar" style="display: none;">
+          <span class="auto-name">自动驾驶</span>
+          <select id="autoSpeed" class="auto-sel">
+            <option value="35">35% 慢</option>
+            <option value="42" selected>42% 中</option>
+            <option value="50">50% 快</option>
+          </select>
+          <button class="btn-preset" onclick="autoReplay()">回放原路</button>
+          <button class="btn-preset" onclick="autoReturn()">原路返回</button>
+          <button class="btn-preset" onclick="routeSave()">记忆路线</button>
+          <button class="btn-preset" onclick="routeLoad()">跑记忆</button>
+          <button class="btn-preset danger" onclick="autoStop(true)">停止</button>
+          <span id="autoState" class="auto-state">待命</span>
+        </div>
+
+        <!-- 精炼紧凑单行轨迹统计 -->
+        <div class="map-stats-compact">
+          <span>里程: <b id="mapLen">0.00 m</b></span>
+          <span>位移: <b id="mapDisp">0.00 m</b></span>
+          <span>坐标: <b id="mapPos">0.00, 0.00</b></span>
+          <span>航向: <b id="mapYaw">0°</b></span>
+        </div>
+      </div>
+
+      <!-- 下半：实时遥测波形示波器 -->
+      <div class="panel panel-scope">
+        <div class="panel-header">
+          <div class="panel-title">实时遥测波形示波器</div>
+          <div class="scope-legend-wrap">
+            <span style="color: #00f2fe; font-weight: 600;">— 车速 (m/s)</span>
+            <span style="color: #ffb300; font-weight: 600;">— 航向角 (°)</span>
+            <button class="btn-preset btn-enlarge" onclick="openEnlargeModal('scope')" title="点击进入大窗查看模式">🔍 放大</button>
+          </div>
+        </div>
+
+        <div class="scope-box" id="scopeWrap" ondblclick="openEnlargeModal('scope')" title="双击或点击右上角放大进入大窗模式">
+          <canvas id="chartCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 大窗全屏查看模态框 -->
+  <div id="enlargeModal" class="enlarge-modal" style="display: none;" onclick="onModalBackdropClick(event)">
+    <div class="enlarge-dialog" onclick="event.stopPropagation()">
+      <div class="enlarge-header">
+        <div class="enlarge-title-box">
+          <span id="enlargeIcon" class="enlarge-icon">🗺️</span>
+          <div>
+            <div id="enlargeTitle" class="enlarge-title">行驶轨迹 · 航位推算 (大窗模式)</div>
+            <div id="enlargeSub" class="enlarge-sub">高清矢量视图 · 实时操控与数据分析</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn-close-modal" onclick="closeEnlargeModal()">✕ 关闭大窗 (ESC)</button>
+        </div>
+      </div>
+      <div class="enlarge-content">
+        <div id="modalHost" class="modal-host"></div>
+      </div>
+      <div class="enlarge-footer" id="enlargeFooter"></div>
+    </div>
+  </div>
+
+
+
+  <script>
+
+    /* ── 大窗模态框与右栏布局交互控制器 ── */
+    let g_enlargedType = null;
+    let g_originalParent = null;
+
+    function openEnlargeModal(type) {
+      if (g_enlargedType) closeEnlargeModal();
+      g_enlargedType = type;
+      const modal = document.getElementById('enlargeModal');
+      const host = document.getElementById('modalHost');
+      const title = document.getElementById('enlargeTitle');
+      const icon = document.getElementById('enlargeIcon');
+      const sub = document.getElementById('enlargeSub');
+      const footer = document.getElementById('enlargeFooter');
+
+      if (type === 'traj') {
+        icon.textContent = '🗺️';
+        title.textContent = '行驶轨迹 · 航位推算 (大窗模式)';
+        sub.textContent = '高清矢量视图 · 滚轮缩放 · 拖动平移 · 双击居中 · 自动驾驶控制';
+
+        const wrap = document.getElementById('mapWrap');
+        g_originalParent = wrap.parentElement;
+        host.appendChild(wrap);
+        wrap.classList.add('in-modal');
+
+        // Move auto-bar to footer
+        const autoBar = document.getElementById('autoBar');
+        if (autoBar) {
+          footer.innerHTML = '';
+          footer.appendChild(autoBar);
+          autoBar.style.display = 'flex';
+          footer.style.display = 'flex';
+        }
+
+        modal.style.display = 'flex';
+        setTimeout(() => { if (typeof trajResize === 'function') trajResize(); }, 60);
+      } else if (type === 'scope') {
+        icon.textContent = '📈';
+        title.textContent = '实时遥测波形示波器 (大窗模式)';
+        sub.textContent = '20Hz 实时遥测流 · 速度与航向角高精度实时波形分析';
+
+        const wrap = document.getElementById('scopeWrap');
+        g_originalParent = wrap.parentElement;
+        host.appendChild(wrap);
+        wrap.classList.add('in-modal');
+
+        footer.innerHTML = '<span style="font-size:11px; color:var(--text-muted);">遥测通道: [CH1] 线速度 (0~2.5 m/s)  |  [CH2] 航向角 (-180° ~ +180°)</span><span style="font-size:11px; color:#00f2fe;">采样率: 20Hz 实时流</span>';
+        footer.style.display = 'flex';
+
+        modal.style.display = 'flex';
+        setTimeout(() => { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 60);
+      }
+    }
+
+    function closeEnlargeModal() {
+      if (!g_enlargedType) return;
+      const modal = document.getElementById('enlargeModal');
+      const footer = document.getElementById('enlargeFooter');
+
+      if (g_enlargedType === 'traj') {
+        const wrap = document.getElementById('mapWrap');
+        wrap.classList.remove('in-modal');
+        if (g_originalParent) {
+          const compactStats = g_originalParent.querySelector('.map-stats-compact');
+          if (compactStats) {
+            g_originalParent.insertBefore(wrap, compactStats);
+          } else {
+            g_originalParent.appendChild(wrap);
+          }
+          // Move autoBar back
+          const autoBar = document.getElementById('autoBar');
+          if (autoBar) {
+            autoBar.style.display = 'none';
+            if (compactStats) {
+              g_originalParent.insertBefore(autoBar, compactStats);
+            } else {
+              g_originalParent.appendChild(autoBar);
+            }
+          }
+        }
+        setTimeout(() => { if (typeof trajResize === 'function') trajResize(); }, 60);
+      } else if (g_enlargedType === 'scope') {
+        const wrap = document.getElementById('scopeWrap');
+        wrap.classList.remove('in-modal');
+        if (g_originalParent) {
+          g_originalParent.appendChild(wrap);
+        }
+        setTimeout(() => { if (typeof resizeCanvas === 'function') resizeCanvas(); }, 60);
+      }
+
+      modal.style.display = 'none';
+      g_enlargedType = null;
+      g_originalParent = null;
+    }
+
+    function onModalBackdropClick(e) {
+      if (e.target && e.target.id === 'enlargeModal') {
+        closeEnlargeModal();
+      }
+    }
+
+    function toggleTrajDropdown(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('trajDropMenu');
+      if (menu) {
+        menu.classList.toggle('show');
+      }
+    }
+
+    window.addEventListener('click', (e) => {
+      const menu = document.getElementById('trajDropMenu');
+      if (menu && menu.classList.contains('show')) {
+        if (!e.target.closest('#trajDropWrap')) {
+          menu.classList.remove('show');
+        }
+      }
+    });
+
+
+    /* ── 全局状态与通信变量 ── */
+
+    let g_port = null;
+
+    let g_reader = null;
+
+    let g_isConnected = false;
+
+    let g_keepReading = false;
+
+    let g_heartbeatTimer = null;
+
+    let g_lastPacketTime = 0;
+
+    let g_speedPct = 50;
+
+    let g_backendMode = false;
+
+    let g_backendConnected = false;
+
+
+
+    /* 实时示波器数据缓存 (最近 120 帧，约 6 秒) */
+
+    const MAX_POINTS = 120;
+
+    const historySpeed = new Array(MAX_POINTS).fill(0);
+
+    const historyYaw = new Array(MAX_POINTS).fill(0);
+
+    const historyAcc = new Array(MAX_POINTS).fill(0.0);
+
+
+
+    /* ── 键盘全局监听 ── */
+
+    const keyMap = {
+
+      'w': 'btnW', 'W': 'btnW',
+
+      's': 'btnS', 'S': 'btnS',
+
+      'a': 'btnA', 'A': 'btnA',
+
+      'd': 'btnD', 'D': 'btnD',
+
+      't': 'btnModeTrack', 'T': 'btnModeTrack',
+
+      'm': 'btnModeManual', 'M': 'btnModeManual',
+
+      ' ': 'btnSpace',
+
+      '1': null, '2': null, '3': null,
+
+      '+': null, '=': null, '-': null, '_': null
+
+    };
+
+
+
+    let g_currentCarState = 0;
+
+
+
+    function setCarRun() {
+
+      writeSerial('!MODE:RUN#');
+
+      writeSerial('r');
+
+      appendLog('CMD', '工况指令: ▶ 启动运行 (RUN)');
+
+    }
+
+
+
+    function setCarStop() {
+
+      stopAll();
+
+      writeSerial('!MODE:STOP#');
+
+      appendLog('CMD', '工况指令: ⏹ 急停待命 (STOP)');
+
+    }
+
+
+
+    function toggleRunStop() {
+
+      if (g_currentCarState === 1 || g_currentCarState === 2) {
+
+        setCarStop();
+
+      } else {
+
+        setCarRun();
+
+      }
+
+    }
+
+
+
+    function switchMode(mode) {
+
+      if (mode === 'TRACK') {
+
+        writeSerial('!MODE:TRACK#');
+
+        writeSerial('t');
+
+        appendLog('MODE', '模式切换: 🚗 循线模式 (TRACK)');
+
+      } else {
+
+        writeSerial('!MODE:MANUAL#');
+
+        writeSerial('m');
+
+        appendLog('MODE', '模式切换: 🎮 遥控模式 (MANUAL)');
+
+      }
+
+    }
+
+
+
+    function resetTrackingPid() {
+
+      writeSerial('!SET:KP=1.2#');
+
+      setTimeout(() => writeSerial('!SET:KD=1.8#'), 50);
+
+      appendLog('PID', '下发循线参数: Kp=1.2, Kd=1.8');
+
+    }
+
+
+
+    /* ── 方向状态打包（支持任意组合，所以能走斜线）──────────────────
+
+     * 单字符协议一次只能表达一个方向：按 W 再按 A，'a' 会把 'w' 覆盖掉，
+
+     * 车就只能直着拐，永远做不出"左前方"。
+
+     *
+
+     * 这里改成按位打包，一次把"当前按住了哪几个方向"整帧发下去：
+
+     *   bit0 = W 前进   bit1 = S 后退   bit2 = A 左   bit3 = D 右
+
+     * 小车端把前后/左右两个分量独立叠加成差速，于是
+
+     *   W        -> 直行
+
+     *   W+A      -> 左前方弧线
+
+     *   A        -> 原地左转
+
+     *   W+D+A    -> 左右抵消 -> 直行（不会抽风）
+
+     *
+
+     * 另一个好处：**松开按键立刻发一帧 !DIR:0#**，
+
+     * 不用等 200ms 补发周期，也不用等小车的 400ms 失联保护，
+
+     * 所以"点一下就松"的短按也能立刻停，不再有"最小转弯时间"。
+
+     *
+
+     * 按住期间仍然每 200ms 补发一次当前状态，用来压住小车端的失联保护
+
+     * （丢包 / 拔线时车会自己停）。 */
+
+    const DIR_BIT = { w: 1, s: 2, a: 4, d: 8 };
+
+    let g_dirMask = 0;
+
+    let g_dirRepeat = null;
+
+
+
+    function sendDirPacket(mask) {
+
+      /* 人一动方向键就退出自动驾驶，人工永远优先 */
+
+      if (drive.active) autoAbort('人工接管方向');
+
+      writeSerial(`!DIR:${mask}#`);
+
+    }
+
+
+
+    function pushDir(log) {
+
+      if (g_dirRepeat) {
+
+        clearInterval(g_dirRepeat);
+
+        g_dirRepeat = null;
+
+      }
+
+      sendDirPacket(g_dirMask);
+
+      if (log) appendLog('DIR', `方向状态 mask=${g_dirMask}`);
+
+      if (g_dirMask !== 0) {
+
+        g_dirRepeat = setInterval(() => sendDirPacket(g_dirMask), 200);
+
+      }
+
+    }
+
+
+
+    function setDirKey(k, down) {
+
+      const bit = DIR_BIT[k];
+
+      if (!bit) return;
+
+      const before = g_dirMask;
+
+      if (down) g_dirMask |= bit;
+
+      else g_dirMask &= ~bit;
+
+      if (g_dirMask !== before) pushDir(true);
+
+    }
+
+
+
+    function clearDir() {
+
+      if (g_dirMask === 0) return;
+
+      g_dirMask = 0;
+
+      pushDir(true);
+
+    }
+
+
+
+    /* 急停：清空按键状态 + 停掉补发 + 让小车刹车。
+
+     * 键盘空格和屏幕上的急停键都走这里 —— 否则"按空格停车后，
+
+     * 再松开还按住的 W"会补发一帧旧方向，车又窜出去。 */
+
+    function stopAll() {
+
+      if (drive.active) autoAbort('急停');
+
+      g_dirMask = 0;
+
+      if (g_dirRepeat) {
+
+        clearInterval(g_dirRepeat);
+
+        g_dirRepeat = null;
+
+      }
+
+      sendCmd(' ');
+
+      appendLog('DIR', '急停');
+
+    }
+
+
+
+    window.addEventListener('keydown', (e) => {
+      /* 核心：阻止空格键触发网页向下滚动，确保刹车操作不移屏 */
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+      }
+      /* 按 ESC 键关闭大窗查看模式 */
+      if (e.key === 'Escape' && g_enlargedType) {
+        closeEnlargeModal();
+        return;
+      }
+
+      if (e.repeat) return;               /* 浏览器的自动重复不要，状态机自己记 */
+
+      const k = e.key;
+
+      if (!keyMap.hasOwnProperty(k)) return;
+
+
+
+      if (keyMap[k]) {
+
+        const btn = document.getElementById(keyMap[k]);
+
+        if (btn) btn.classList.add('active');
+
+      }
+
+
+
+      const lk = k.toLowerCase();
+
+      if (DIR_BIT[lk]) {
+
+        setDirKey(lk, true);
+
+      } else if (k === '+' || k === '=') {
+
+        adjustSpeed(5);
+
+      } else if (k === '-' || k === '_') {
+
+        adjustSpeed(-5);
+
+      } else if (k === ' ') {
+
+        stopAll();                        /* 空格 = 急停 */
+
+      } else if (lk === 't') {
+
+        switchMode('TRACK');
+
+      } else if (lk === 'm') {
+
+        switchMode('MANUAL');
+
+      } else {
+
+        sendCmd(k);                       /* 1 / 2 / 3 等单字符指令 */
+
+      }
+
+    });
+
+
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+      }
+
+      const k = e.key;
+
+      if (keyMap.hasOwnProperty(k) && keyMap[k]) {
+
+        const btn = document.getElementById(keyMap[k]);
+
+        if (btn) btn.classList.remove('active');
+
+      }
+
+      const lk = k.toLowerCase();
+
+      if (DIR_BIT[lk]) setDirKey(lk, false);
+
+    });
+
+
+
+    /* 失焦 / 切窗口：必须主动停车，否则按键状态永远停在"按住" */
+
+    window.addEventListener('blur', clearDir);
+
+
+
+    /* 屏幕上的方向按钮：同样走状态机，按下置位、抬起清位 */
+
+    [['btnW', 'w'], ['btnS', 's'], ['btnA', 'a'], ['btnD', 'd']].forEach(([id, ch]) => {
+
+      const el = document.getElementById(id);
+
+      if (!el) return;
+
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); setDirKey(ch, true); });
+
+      el.addEventListener('pointerup', () => setDirKey(ch, false));
+
+      el.addEventListener('pointerleave', () => setDirKey(ch, false));
+
+      el.addEventListener('pointercancel', () => setDirKey(ch, false));
+
+    });
+
+
+
+    /* 空格 = 急停：清方向状态 + 发 STOP（会刹车并把状态置为 STOP） */
+
+    (function () {
+
+      const el = document.getElementById('btnSpace');
+
+      if (!el) return;
+
+      el.addEventListener('pointerdown', (e) => {
+
+        e.preventDefault();
+
+        stopAll();
+
+      });
+
+    })();
+
+
+
+    /* ── 调速与指令发送 ── */
+
+    function updateSpeedUI(pct) {
+      pct = Math.max(5, Math.min(100, pct));
+      g_speedPct = pct;
+
+      const el = document.getElementById('speedDisplay') || document.getElementById('sliderVal');
+      if (el) el.innerText = pct + '%';
+
+      const slider = document.getElementById('speedSlider');
+      if (slider && parseInt(slider.value) !== pct) slider.value = pct;
+
+      document.querySelectorAll('.speed-chips .chip').forEach(btn => {
+        const val = parseInt(btn.getAttribute('data-pct'));
+        if (val === pct) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    function onSliderInput(val) {
+      const pct = Math.max(5, Math.min(100, parseInt(val) || 5));
+      updateSpeedUI(pct);
+      sendSpeedPacket(pct);
+    }
+
+    function onSpeedSlider(val) {
+      onSliderInput(val);
+    }
+
+    function setSpeed(pct) {
+      const p = Math.max(5, Math.min(100, pct));
+      updateSpeedUI(p);
+      sendSpeedPacket(p);
+    }
+
+    function setSpeedPreset(pct) {
+      setSpeed(pct);
+    }
+
+    function adjustSpeed(delta) {
+      let next = Math.max(5, Math.min(100, g_speedPct + delta));
+      setSpeed(next);
+    }
+
+
+
+    async function sendSpeedPacket(pct) {
+
+      const pkt = `!SET:SPD=${pct}#`;
+
+      await writeSerial(pkt);
+
+      appendLog('CMD', `下发限速包: ${pkt}`);
+
+    }
+
+
+
+    async function sendCmd(cmdChar) {
+
+      await writeSerial(cmdChar);
+
+      appendLog('TX', `下发指令: '${cmdChar}'`);
+
+    }
+
+
+
+    /* ── 统一串口写入（支持 Web Serial 与 Python 后端） ── */
+
+    async function writeSerial(str) {
+
+      if (g_port && g_port.writable) {
+
+        try {
+
+          const encoder = new TextEncoder();
+
+          const writer = g_port.writable.getWriter();
+
+          await writer.write(encoder.encode(str));
+
+          writer.releaseLock();
+
+        } catch (err) {
+
+          console.error('Web Serial 发送错误:', err);
+
+        }
+
+      } else if (g_backendConnected) {
+
+        try {
+
+          await fetch('/api/send', {
+
+            method: 'POST',
+
+            headers: { 'Content-Type': 'application/json' },
+
+            body: JSON.stringify({ cmd: str })
+
+          });
+
+        } catch (err) {
+
+          console.error('后端发送错误:', err);
+
+        }
+
+      }
+
+    }
+
+
+
+    /* ── 连接切换 ── */
+
+    async function toggleConnection() {
+
+      if (g_backendMode) {
+
+        /* Python 后端模式切换 */
+
+        if (g_backendConnected) {
+
+          await fetch('/api/disconnect', { method: 'POST' });
+
+          g_backendConnected = false;
+
+          updateLinkStatus(false);
+
+          appendLog('SYS', '已断开 Python 后端串口连接');
+
+        } else {
+
+          const select = document.getElementById('backendPortSelect');
+
+          const port = select.value;
+
+          if (!port) {
+
+            alert('请先选择有效串口！');
+
+            return;
+
+          }
+
+          try {
+
+            const res = await fetch('/api/connect', {
+
+              method: 'POST',
+
+              headers: { 'Content-Type': 'application/json' },
+
+              body: JSON.stringify({ port: port, baud: 115200 })
+
+            });
+
+            const data = await res.json();
+
+            if (data.ok) {
+
+              g_backendConnected = true;
+
+              g_lastPacketTime = 0;
+
+              /* 端口打开 ≠ 小车在线：先显示"等待遥测"，收到帧才转绿 */
+
+              updateLinkStatus(false, '串口已打开 · 等待小车遥测…', true);
+
+              appendLog('SYS', `Python 后端已打开串口: ${port}`);
+
+            } else {
+
+              alert('连接失败: ' + (data.error || '未知错误'));
+
+            }
+
+          } catch (e) {
+
+            alert('连接后端失败: ' + e.message);
+
+          }
+
+        }
+
+        return;
+
+      }
+
+
+
+      /* Web Serial 原生模式切换 */
+
+      if (g_isConnected) {
+
+        await disconnectSerial();
+
+      } else {
+
+        await connectSerial();
+
+      }
+
+    }
+
+
+
+    /* ── Web Serial 原生接口实现 ── */
+
+    async function connectSerial() {
+
+      if (!('serial' in navigator)) {
+
+        alert('当前浏览器暂不支持 Web Serial API。\n建议使用最新版 Google Chrome、Microsoft Edge 或 Opera 浏览器！\n或者双击“启动网页测控工作站.bat”使用本地后端服务。');
+
+        return;
+
+      }
+
+
+
+      try {
+
+        g_port = await navigator.serial.requestPort();
+
+        await g_port.open({ baudRate: 115200 });
+
+
+
+        g_isConnected = true;
+
+        g_keepReading = true;
+
+        g_lastPacketTime = 0;
+
+        /* 同样：串口一打开不算在线，等第一帧遥测到达再变绿 */
+
+        updateLinkStatus(false, '串口已打开 · 等待小车遥测…', true);
+
+        appendLog('SYS', 'Web Serial 连接成功: 115200 8N1');
+
+
+
+        /* 启动 200ms 心跳定时器维持小车绿灯常亮 */
+
+        g_heartbeatTimer = setInterval(async () => {
+
+          if (g_isConnected) {
+
+            await writeSerial('h');
+
+          }
+
+        }, 200);
+
+
+
+        readSerialLoop();
+
+      } catch (err) {
+
+        console.error(err);
+
+        appendLog('ERR', `打开串口失败: ${err.message}`);
+
+      }
+
+    }
+
+
+
+    async function disconnectSerial() {
+
+      g_keepReading = false;
+
+      if (g_heartbeatTimer) {
+
+        clearInterval(g_heartbeatTimer);
+
+        g_heartbeatTimer = null;
+
+      }
+
+
+
+      if (g_reader) {
+
+        try { await g_reader.cancel(); } catch (e) {}
+
+      }
+
+
+
+      if (g_port) {
+
+        try { await g_port.close(); } catch (e) {}
+
+        g_port = null;
+
+      }
+
+
+
+      g_isConnected = false;
+
+      updateLinkStatus(false);
+
+      appendLog('SYS', '串口已关闭断开');
+
+    }
+
+
+
+    /* ── 遥测解包状态机 (20 字节 0xAA 0x55 ... 0x55 0xAA) ── */
+
+    async function readSerialLoop() {
+
+      let buf = [];
+
+      while (g_port && g_port.readable && g_keepReading) {
+
+        try {
+
+          g_reader = g_port.readable.getReader();
+
+          while (true) {
+
+            const { value, done } = await g_reader.read();
+
+            if (done) break;
+
+            if (value) {
+
+              for (let i = 0; i < value.length; i++) {
+
+                buf.push(value[i]);
+
+              }
+
+
+
+              /* 检索 20 字节协议帧 */
+
+              while (buf.length >= 20) {
+
+                if (buf[0] === 0xAA && buf[1] === 0x55) {
+
+                  if (buf[18] === 0x55 && buf[19] === 0xAA) {
+
+                    let sum = 0;
+
+                    for (let k = 2; k <= 16; k++) {
+
+                      sum = (sum + buf[k]) & 0xFF;
+
+                    }
+
+                    if (sum === buf[17]) {
+
+                      parseTelemetryFrame(buf.slice(0, 20));
+
+                      buf = buf.slice(20);
+
+                      continue;
+
+                    }
+
+                  }
+
+                  buf.shift();
+
+                } else {
+
+                  const idx = buf.indexOf(0xAA);
+
+                  if (idx > 0) {
+
+                    buf = buf.slice(idx);
+
+                  } else if (idx === -1) {
+
+                    buf = [];
+
+                  } else {
+
+                    break;
+
+                  }
+
+                }
+
+              }
+
+            }
+
+          }
+
+        } catch (err) {
+
+          console.warn('读取异常:', err);
+
+          break;
+
+        } finally {
+
+          if (g_reader) {
+
+            try { g_reader.releaseLock(); } catch (e) {}
+
+            g_reader = null;
+
+          }
+
+        }
+
+      }
+
+    }
+
+
+
+    function parseTelemetryFrame(frame) {
+
+      g_lastPacketTime = Date.now();
+
+
+
+      const speedPct = frame[2];
+
+      /* [3] 低 7 位是运行状态，最高位是"上位机(无线)在线"标志。
+
+       * 不掩掉的话状态会变成 128/129，stateMap 查不到就显示成 RUN。 */
+
+      const carState = frame[3] & 0x7F;
+
+      const lightState = frame[4];
+
+
+
+      let spdMm = (frame[5] << 8) | frame[6];
+
+      if (spdMm > 32767) spdMm -= 65536;
+
+
+
+      let distMm = (frame[7] << 24) | (frame[8] << 16) | (frame[9] << 8) | frame[10];
+
+
+
+      let yaw01 = (frame[11] << 8) | frame[12];
+
+      if (yaw01 > 32767) yaw01 -= 65536;
+
+
+
+      let acc001g = (frame[13] << 8) | frame[14];
+
+      if (acc001g > 32767) acc001g -= 65536;
+
+
+
+      updateTelemetryDisplay({
+
+        speed: spdMm / 1000.0,
+
+        dist: distMm / 1000.0,
+
+        yaw: yaw01 / 10.0,
+
+        acc: acc001g / 100.0,
+
+        speed_pct: speedPct,
+
+        state: carState,
+
+        light: lightState
+
+      });
+
+    }
+
+
+
+    function updateTelemetryDisplay(d) {
+
+      document.getElementById('valSpeed').innerText = d.speed.toFixed(2);
+
+      document.getElementById('valDist').innerText = d.dist.toFixed(2);
+
+      document.getElementById('valYaw').innerText = (d.yaw >= 0 ? '+' : '') + d.yaw.toFixed(1) + '°';
+
+      document.getElementById('valAcc').innerText = d.acc.toFixed(2);
+
+
+
+      const ring = document.getElementById('compassRing');
+
+      if (ring) {
+
+        ring.style.transform = `rotate(${d.yaw}deg)`;
+
+      }
+
+
+
+      g_currentCarState = d.state;
+
+      const stEl = document.getElementById('valState');
+
+      const bRun = document.getElementById('btnRun');
+
+      const bStop = document.getElementById('btnStop');
+
+      const bTrack = document.getElementById('btnModeTrack');
+
+      const bManual = document.getElementById('btnModeManual');
+
+
+
+      if (bRun) bRun.classList.remove('active-run');
+
+      if (bStop) bStop.classList.remove('active-stop');
+
+      if (bTrack) bTrack.classList.remove('active-track');
+
+      if (bManual) bManual.classList.remove('active-manual');
+
+
+
+      if (d.state === 2) {
+
+        // 自主循线模式
+
+        if (stEl) {
+
+          stEl.innerHTML = '<span style="color: var(--primary); font-weight: 800;">🚗 TRACK (循线)</span>';
+
+        }
+
+        if (bRun) bRun.classList.add('active-run');
+
+        if (bTrack) bTrack.classList.add('active-track');
+
+      } else if (d.state === 1) {
+
+        // 遥控就绪模式
+
+        if (stEl) {
+
+          stEl.innerHTML = '<span style="color: var(--accent-green); font-weight: 800;">▶ RUN (就绪)</span>';
+
+        }
+
+        if (bRun) bRun.classList.add('active-run');
+
+        if (bManual) bManual.classList.add('active-manual');
+
+      } else {
+
+        // 停止/急停待命 (state == 0 或其它)
+
+        if (stEl) {
+
+          stEl.innerHTML = '<span style="color: var(--accent-red); font-weight: 800;">⏹ STOP (停止)</span>';
+
+        }
+
+        if (bStop) bStop.classList.add('active-stop');
+
+      }
+
+
+
+      historySpeed.shift(); historySpeed.push(d.speed);
+
+      historyYaw.shift(); historyYaw.push(d.yaw);
+
+      historyAcc.shift(); historyAcc.push(d.acc);
+
+
+
+      /* 每帧推一次轨迹积分（20Hz，位移增量来自编码器里程） */
+
+      trajFeed(d);
+
+
+
+      /* 自动驾驶在拿到新位姿后立刻算下一步，凑成 20Hz 闭环 */
+
+      autoStep();
+
+    }
+
+
+
+    /* ── 界面状态更新 ──
+
+     * online   : 真的在收遥测帧（绿灯 + "双向在线"）
+
+     * portOpen : 串口是否已打开（决定按钮是"连接"还是"断开"）
+
+     * 这两个状态必须分开：端口开了但小车没开机，只是"等待遥测"，
+
+     * 绝不能显示在线。 */
+
+    function updateLinkStatus(online, customMsg, portOpen) {
+
+      const pill = document.getElementById('statusPill');
+
+      const text = document.getElementById('statusText');
+
+      const btn = document.getElementById('btnConnect');
+
+      const label = document.getElementById('btnLabel');
+
+
+
+      if (portOpen === undefined) portOpen = online;
+
+
+
+      pill.className = online ? 'status-pill online' : 'status-pill';
+
+      if (customMsg) {
+
+        text.innerText = customMsg;
+
+      } else {
+
+        text.innerText = online ? '双向链路正常 (20Hz)' : '串口未连接';
+
+      }
+
+
+
+      btn.className = portOpen ? 'btn-connect connected' : 'btn-connect';
+
+      label.innerText = portOpen
+
+        ? '断开串口'
+
+        : (g_backendMode ? '连接后端串口' : '连接串口 (Web Serial)');
+
+
+
+      /* 等待状态用黄色提示，避免和"在线/离线"混淆 */
+
+      text.style.color = (!online && portOpen) ? 'var(--accent-yellow, #e0a72d)' : '';
+
+    }
+
+
+
+    /* ── 后端 HTTP / API 轮询与探测 ── */
+
+    async function initBackendDetection() {
+
+      if (location.protocol.startsWith('http')) {
+
+        try {
+
+          const res = await fetch('/api/ports');
+
+          if (res.ok) {
+
+            const ports = await res.json();
+
+            g_backendMode = true;
+
+            const select = document.getElementById('backendPortSelect');
+
+            select.style.display = 'block';
+
+            select.innerHTML = '';
+
+            if (ports && ports.length > 0) {
+
+              ports.forEach(p => {
+
+                const opt = document.createElement('option');
+
+                opt.value = p.device;
+
+                opt.innerText = `${p.device} (${p.desc})`;
+
+                select.appendChild(opt);
+
+              });
+
+            } else {
+
+              select.innerHTML = '<option value="">未检测到串口</option>';
+
+            }
+
+
+
+            /* 下拉框宽度是固定的（190px），端口描述太长会被裁掉，
+
+             * 用 title 把完整名称挂上去，悬停即可看清。
+
+             * 注意只改 title，不改宽度 —— 一旦让宽度跟着文字走，
+
+             * 旁边的状态胶囊和按钮就会跟着左右挪。 */
+
+            const syncPortTitle = () => {
+
+              if (select.selectedIndex >= 0) {
+
+                select.title = select.options[select.selectedIndex].text;
+
+              }
+
+            };
+
+            syncPortTitle();
+
+            select.addEventListener('change', syncPortTitle);
+
+
+
+            document.getElementById('btnLabel').innerText = '连接后端串口';
+
+            appendLog('SYS', `检测到 Python 本地服务，已开启后端桥接模式`);
+
+
+
+            /* 启动 20Hz 遥测轮询 */
+
+            setInterval(pollBackendTelemetry, 50);
+
+          }
+
+        } catch (e) {
+
+          // 非 web_server 托管模式，正常使用 Web Serial
+
+        }
+
+      }
+
+    }
+
+
+
+    async function pollBackendTelemetry() {
+
+      if (!g_backendMode) return;
+
+      try {
+
+        const res = await fetch('/api/telemetry');
+
+        if (!res.ok) return;
+
+        const json = await res.json();
+
+
+
+        const portOpen = !!json.connected;
+
+        const online = !!json.online;
+
+
+
+        if (portOpen && online) {
+
+          g_backendConnected = true;
+
+          /* 用后端真实帧龄回填，而不是每 50ms 无条件刷新成"现在"。
+
+           * 之前就是这里把 g_lastPacketTime 一直刷新，
+
+           * 导致 1.2s 超时保护形同虚设。 */
+
+          const age = (typeof json.age_ms === 'number') ? json.age_ms : 0;
+
+          g_lastPacketTime = Date.now() - age;
+
+          updateLinkStatus(true, `双向在线 20Hz (${Math.round(age)}ms)`, true);
+
+          updateTelemetryDisplay(json.data);
+
+        } else if (portOpen) {
+
+          g_backendConnected = true;
+
+          updateLinkStatus(false, '串口已连接 · 等待小车遥测…', true);
+
+        } else {
+
+          if (g_backendConnected) {
+
+            g_backendConnected = false;
+
+            g_lastPacketTime = 0;
+
+            updateLinkStatus(false, '串口未连接', false);
+
+          }
+
+        }
+
+      } catch (e) {}
+
+    }
+
+
+
+    initBackendDetection();
+
+
+
+    /* 链路超时监视：仅用于 Web Serial 直连模式。
+
+     * 后端模式由 pollBackendTelemetry 依据服务端返回的真实帧龄判断，
+
+     * 两处同时改状态会互相覆盖，导致文案闪烁。 */
+
+    setInterval(() => {
+
+      if (g_backendMode || !g_isConnected) return;
+
+      if (g_lastPacketTime === 0) return;   // 还没收到过帧：保持"等待小车遥测"
+
+
+
+      const dt = Date.now() - g_lastPacketTime;
+
+      if (dt > 1200) {
+
+        updateLinkStatus(false, `等待遥测超时 (${(dt / 1000).toFixed(1)}s)`, true);
+
+      } else {
+
+        updateLinkStatus(true, `小车在线 20Hz (${dt}ms)`, true);
+
+      }
+
+    }, 400);
+
+
+
+    /* ── 日志工具 ── */
+
+    function appendLog(tag, msg) {
+
+      const box = document.getElementById('logBox');
+
+      if (!box) return;
+
+      const now = new Date();
+
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+
+      
+
+      const line = document.createElement('div');
+
+      line.className = 'log-line';
+
+      line.innerHTML = `<span class="time">[${timeStr}]</span><span class="tag">${tag}</span><span class="msg">${msg}</span>`;
+
+      box.appendChild(line);
+
+      box.scrollTop = box.scrollHeight;
+
+    }
+
+
+
+    function clearLogs() {
+
+      const box = document.getElementById('logBox');
+
+      if (box) box.innerHTML = '';
+
+    }
+
+
+
+    /* 手机手柄入口：把局域网地址直接写进日志，手机照着输就行 */
+
+    async function showMobileUrl() {
+
+      try {
+
+        const res = await fetch('/api/info');
+
+        const j = await res.json();
+
+        appendLog('SYS', `手机浏览器打开 ${j.mobile_url}（手机与电脑连同一个 Wi-Fi）`);
+
+        if (navigator.clipboard) {
+
+          navigator.clipboard.writeText(j.mobile_url).catch(() => {});
+
+          appendLog('SYS', '地址已复制到剪贴板');
+
+        }
+
+      } catch (e) {
+
+        appendLog('SYS', '未通过 Python 服务打开页面，没有局域网地址；请用 web_server.py 启动');
+
+      }
+
+    }
+
+
+
+    /* ══════════════════════════════════════════════════════════════════
+
+     * 行驶轨迹绘图（航位推算 / Dead Reckoning）
+
+     *
+
+     * 数据源只有遥测帧里已有的三样东西：里程 D(mm)、航向 Y(0.1°)、轮速 V。
+
+     * 每帧取"里程增量 ds"，按当前航向做极坐标积分：
+
+     *     x += ds·sin(θ)     y += ds·cos(θ)      （x 向右、y 向前，单位 mm）
+
+     *
+
+     * 为什么用 ds 而不是 v·dt：
+
+     *   无线丢帧时，v·dt 会把丢失的那段时间也当成位移（冲出去一大截），
+
+     *   而里程增量是编码器的真实累计值，补帧后自然补齐，不会凭空多走路。
+
+     *   倒车同理：ds 为负就是沿车尾方向退，符号天然正确。
+
+     *
+
+     * 精度边界（诚实地写在代码里）：
+
+     *   · 陀螺仪航向会缓慢漂移 → 长距离闭合回路会差一点，画"8"字久了会歪；
+
+     *   · 轮径标定误差按比例放大到全程（65mm 轮、1:28 减速比，13PPR）；
+
+     *   · 打滑时编码器照转，轨迹会比实际走得远。
+
+     *   短程（十几米内）够玩，做比赛定位要靠场地标记或视觉纠正。
+
+     * ══════════════════════════════════════════════════════════════════ */
+
+    const TRAJ_MAX_PTS = 30000;      /* 20Hz 下约 25 分钟，超出丢最早一半 */
+
+    const TRAJ_YAW_SIGN = 1.0;       /* 右转时轨迹往右弯；若整体镜像，改成 -1 */
+
+
+
+    const traj = {
+
+      pts: [{ x: 0, y: 0, v: 0, yaw: 0, seg: 0, t: 0 }],
+
+      seg: 0,
+
+      lastDist: null,
+
+      yaw: 0,
+
+      accLen: 0,                     /* 累计路程 mm（含倒车） */
+
+      vw: 1, vh: 1,
+
+      minX: 0, maxX: 0, minY: 0, maxY: 0,
+
+      scale: 0.5, target: 0.5,
+
+      cx: 0, cy: 0,                  /* 视图中心（世界坐标 mm） */
+
+      panX: 0, panY: 0,
+
+      zoomMul: 1,
+
+      autoFit: true,
+
+      recording: true,
+
+      statT: 0
+
+    };
+
+
+
+    const trajCanvas = document.getElementById('trajCanvas');
+
+    const trajCtx = trajCanvas.getContext('2d');
+
+
+
+    function trajResize() {
+
+      const dpr = window.devicePixelRatio || 1;
+
+      const w = trajCanvas.parentElement.clientWidth || 1;
+
+      const h = trajCanvas.parentElement.clientHeight || 1;
+
+      trajCanvas.width = Math.max(1, Math.round(w * dpr));
+
+      trajCanvas.height = Math.max(1, Math.round(h * dpr));
+
+      trajCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      traj.vw = w;
+
+      traj.vh = h;
+
+    }
+
+
+
+    function trajRebuildBounds() {
+
+      traj.minX = traj.maxX = traj.minY = traj.maxY = 0;
+
+      for (const p of traj.pts) {
+
+        if (p.x < traj.minX) traj.minX = p.x;
+
+        if (p.x > traj.maxX) traj.maxX = p.x;
+
+        if (p.y < traj.minY) traj.minY = p.y;
+
+        if (p.y > traj.maxY) traj.maxY = p.y;
+
+      }
+
+    }
+
+
+
+    /* 清空：把当前位置当作新原点。
+
+     * lastDist 置空 → 下一帧重新取基线，这样既不会把"清空之前的累计里程"
+
+     * 当成一次巨大跳变（那会画出一条横穿全图的直线），也不会多打一条断笔日志。 */
+
+    function trajReset(byUser) {
+
+      traj.pts = [{ x: 0, y: 0, v: 0, yaw: traj.yaw, seg: 0, t: 0 }];
+
+      traj.seg = 0;
+
+      traj.accLen = 0;
+
+      traj.lastDist = null;
+
+      traj.minX = traj.maxX = traj.minY = traj.maxY = 0;
+
+      traj.cx = traj.cy = 0;
+
+      traj.panX = traj.panY = 0;
+
+      traj.zoomMul = 1;
+
+      traj.autoFit = true;
+
+      traj.scale = traj.target = 0.5;
+
+      traj.statT = 0;
+
+      const btn = document.getElementById('trajAuto');
+
+      if (btn) btn.classList.add('on');
+
+      if (byUser) appendLog('MAP', '轨迹已清空，当前位置作为新原点');
+
+    }
+
+
+
+    /* 每收到一帧遥测调用一次 */
+
+    function trajFeed(d) {
+
+      const dist = d.dist * 1000;                        /* m -> mm */
+
+      const yaw = ((d.yaw % 360) + 360) % 360;           /* 归一到 0~360 */
+
+      traj.yaw = yaw;
+
+
+
+      if (traj.lastDist === null) { traj.lastDist = dist; return; }
+
+
+
+      const ds = dist - traj.lastDist;
+
+      traj.lastDist = dist;
+
+
+
+      if (!isFinite(ds)) return;
+
+
+
+      /* 里程被清零（S2 / 重启）或数值异常跳变：只断笔，不猜位移。
+
+       * 阈值 300mm 远大于任何一帧的真实位移（0.4m/s ÷ 20Hz = 20mm），
+
+       * 所以正常倒车不会被误判成跳变。 */
+
+      if (Math.abs(ds) > 300) {
+
+        traj.seg++;
+
+        appendLog('MAP', `里程跳变 ${ds.toFixed(0)}mm，轨迹断笔`);
+
+        return;
+
+      }
+
+      if (!traj.recording || ds === 0) return;
+
+
+
+      const th = yaw * Math.PI / 180 * TRAJ_YAW_SIGN;
+
+      const last = traj.pts[traj.pts.length - 1];
+
+      const x = last.x + ds * Math.sin(th);
+
+      const y = last.y + ds * Math.cos(th);
+
+
+
+      traj.pts.push({ x, y, v: d.speed || 0, yaw, seg: traj.seg, t: performance.now() });
+
+      traj.accLen += Math.abs(ds);
+
+
+
+      if (x < traj.minX) traj.minX = x;
+
+      if (x > traj.maxX) traj.maxX = x;
+
+      if (y < traj.minY) traj.minY = y;
+
+      if (y > traj.maxY) traj.maxY = y;
+
+
+
+      if (traj.pts.length > TRAJ_MAX_PTS) {
+
+        traj.pts.splice(0, TRAJ_MAX_PTS / 2);
+
+        trajRebuildBounds();
+
+      }
+
+    }
+
+
+
+    function trajK() { return traj.scale * traj.zoomMul; }
+
+    function trajSX(wx) { return traj.vw / 2 + traj.panX + (wx - traj.cx) * trajK(); }
+
+    function trajSY(wy) { return traj.vh / 2 + traj.panY - (wy - traj.cy) * trajK(); }
+
+
+
+    /* 自动缩放：把整条轨迹装进视野，缩放到"好看"为止（1.1 px/mm 封顶，
+
+     * 否则刚开机只有 1mm 位移时会被放大到看不见网格）。 */
+
+    function trajUpdateView() {
+
+      const pad = 36;
+
+      if (traj.autoFit) {
+
+        const dx = Math.max(traj.maxX - traj.minX, 150);
+
+        const dy = Math.max(traj.maxY - traj.minY, 150);
+
+        const s = Math.min((traj.vw - pad * 2) / dx, (traj.vh - pad * 2) / dy);
+
+        traj.target = Math.max(0.004, Math.min(s, 1.1));
+
+        traj.cx = (traj.minX + traj.maxX) / 2;
+
+        traj.cy = (traj.minY + traj.maxY) / 2;
+
+        traj.panX = traj.panY = 0;
+
+        traj.zoomMul = 1;
+
+      } else {
+
+        traj.target = traj.scale;
+
+      }
+
+      /* 一阶平滑：不然每帧 min/max 一变，画面就跟着"呼吸"抖动 */
+
+      traj.scale += (traj.target - traj.scale) * 0.18;
+
+      if (Math.abs(traj.target - traj.scale) < 1e-5) traj.scale = traj.target;
+
+    }
+
+
+
+    function trajNiceStep(k) {
+
+      const cand = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+
+      for (const c of cand) if (c * k >= 44) return c;
+
+      return 100000;
+
+    }
+
+
+
+    function trajRender() {
+
+      const w = traj.vw, h = traj.vh, k = trajK();
+
+      if (w < 2 || h < 2) return;
+
+
+
+      trajCtx.fillStyle = '#05080e';
+
+      trajCtx.fillRect(0, 0, w, h);
+
+
+
+      const wxOf = sx => (sx - w / 2 - traj.panX) / k + traj.cx;
+
+      const wyOf = sy => traj.cy - (sy - h / 2 - traj.panY) / k;
+
+
+
+      /* 世界坐标网格：随缩放自动换挡 100mm / 200mm / 500mm / 1m / 2m … */
+
+      const step = trajNiceStep(k);
+
+      const x0 = wxOf(0), x1 = wxOf(w);
+
+      const yTop = wyOf(0), yBot = wyOf(h);
+
+
+
+      trajCtx.lineWidth = 1;
+
+      trajCtx.strokeStyle = 'rgba(255, 255, 255, 0.055)';
+
+      trajCtx.beginPath();
+
+      for (let gx = Math.ceil(x0 / step) * step; gx <= x1; gx += step) {
+
+        const sx = Math.round(trajSX(gx)) + 0.5;
+
+        trajCtx.moveTo(sx, 0);
+
+        trajCtx.lineTo(sx, h);
+
+      }
+
+      for (let gy = Math.ceil(yBot / step) * step; gy <= yTop; gy += step) {
+
+        const sy = Math.round(trajSY(gy)) + 0.5;
+
+        trajCtx.moveTo(0, sy);
+
+        trajCtx.lineTo(w, sy);
+
+      }
+
+      trajCtx.stroke();
+
+
+
+      /* 原点十字轴线 */
+
+      trajCtx.strokeStyle = 'rgba(0, 242, 254, 0.16)';
+
+      trajCtx.beginPath();
+
+      const ax = Math.round(trajSX(0)) + 0.5, ay = Math.round(trajSY(0)) + 0.5;
+
+      trajCtx.moveTo(ax, 0); trajCtx.lineTo(ax, h);
+
+      trajCtx.moveTo(0, ay); trajCtx.lineTo(w, ay);
+
+      trajCtx.stroke();
+
+
+
+      /* 轨迹折线：按 seg 分段，跳变/清零处断开，不画假直线 */
+
+      trajCtx.lineJoin = 'round';
+
+      trajCtx.lineCap = 'round';
+
+      trajCtx.strokeStyle = 'rgba(0, 242, 254, 0.75)';
+
+      trajCtx.lineWidth = 2;
+
+      trajCtx.beginPath();
+
+      let prevSeg = -1;
+
+      for (const p of traj.pts) {
+
+        const sx = trajSX(p.x), sy = trajSY(p.y);
+
+        if (p.seg !== prevSeg) { trajCtx.moveTo(sx, sy); prevSeg = p.seg; }
+
+        else trajCtx.lineTo(sx, sy);
+
+      }
+
+      trajCtx.stroke();
+
+
+
+      /* 末段高亮（最近 60 点），看起来像"车尾的尾焰" */
+
+      const tail = traj.pts.slice(-60);
+
+      if (tail.length > 1) {
+
+        trajCtx.strokeStyle = '#7ff9ff';
+
+        trajCtx.lineWidth = 2.6;
+
+        trajCtx.shadowColor = 'rgba(0, 242, 254, 0.8)';
+
+        trajCtx.shadowBlur = 9;
+
+        trajCtx.beginPath();
+
+        for (let i = 0; i < tail.length; i++) {
+
+          const sx = trajSX(tail[i].x), sy = trajSY(tail[i].y);
+
+          if (i === 0 || tail[i].seg !== tail[i - 1].seg) trajCtx.moveTo(sx, sy);
+
+          else trajCtx.lineTo(sx, sy);
+
+        }
+
+        trajCtx.stroke();
+
+        trajCtx.shadowBlur = 0;
+
+      }
+
+
+
+      /* 起点 */
+
+      const s0 = traj.pts[0];
+
+      trajCtx.fillStyle = 'rgba(0, 230, 118, 0.9)';
+
+      trajCtx.beginPath();
+
+      trajCtx.arc(trajSX(s0.x), trajSY(s0.y), 4, 0, Math.PI * 2);
+
+      trajCtx.fill();
+
+
+
+      /* 当前位姿：航向箭头。
+
+       * 世界坐标 (sinθ, cosθ) 映射到屏幕是 (sinθ, -cosθ)，
+
+       * 所以画布旋转 θ（顺时针为正）后，本地 (0,-1) 正好指向车头。 */
+
+      const last = traj.pts[traj.pts.length - 1];
+
+      const px = trajSX(last.x), py = trajSY(last.y);
+
+      trajCtx.save();
+
+      trajCtx.translate(px, py);
+
+      trajCtx.rotate(traj.yaw * Math.PI / 180 * TRAJ_YAW_SIGN);
+
+      trajCtx.fillStyle = '#ffffff';
+
+      trajCtx.shadowColor = 'rgba(0, 242, 254, 0.9)';
+
+      trajCtx.shadowBlur = 12;
+
+      trajCtx.beginPath();
+
+      trajCtx.moveTo(0, -10);
+
+      trajCtx.lineTo(6.5, 7);
+
+      trajCtx.lineTo(0, 3.5);
+
+      trajCtx.lineTo(-6.5, 7);
+
+      trajCtx.closePath();
+
+      trajCtx.fill();
+
+      trajCtx.restore();
+
+      trajCtx.shadowBlur = 0;
+
+
+
+      /* 比例尺 */
+
+      const mPx = 1000 * k;
+
+      let barM = 0.1;
+
+      for (const v of [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]) if (v * mPx <= 190) barM = v;
+
+      const barPx = barM * mPx;
+
+      const bx = w - 20 - barPx, by = h - 18;
+
+      trajCtx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+
+      trajCtx.lineWidth = 1.5;
+
+      trajCtx.beginPath();
+
+      trajCtx.moveTo(bx, by); trajCtx.lineTo(bx + barPx, by);
+
+      trajCtx.moveTo(bx, by - 3); trajCtx.lineTo(bx, by + 3);
+
+      trajCtx.moveTo(bx + barPx, by - 3); trajCtx.lineTo(bx + barPx, by + 3);
+
+      trajCtx.stroke();
+
+      trajCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+
+      trajCtx.font = '10px Consolas, monospace';
+
+      trajCtx.textAlign = 'right';
+
+      trajCtx.fillText(`${barM >= 1 ? barM : barM.toFixed(1)} m`, bx + barPx, by - 6);
+
+      trajCtx.textAlign = 'left';
+
+
+
+      /* 读数面板 10Hz 刷新，别每帧都写 DOM */
+
+      const now = performance.now();
+
+      if (now - traj.statT > 100) {
+
+        traj.statT = now;
+
+        const disp = Math.hypot(last.x - s0.x, last.y - s0.y) / 1000;
+
+        document.getElementById('mapLen').innerText = (traj.accLen / 1000).toFixed(2) + ' m';
+
+        document.getElementById('mapDisp').innerText = disp.toFixed(2) + ' m';
+
+        document.getElementById('mapPos').innerText =
+
+          (last.x / 1000).toFixed(2) + ' / ' + (last.y / 1000).toFixed(2);
+
+        document.getElementById('mapYaw').innerText = traj.yaw.toFixed(0) + '°';
+
+      }
+
+    }
+
+
+
+    function trajLoop() {
+
+      trajUpdateView();
+
+      trajRender();
+
+      requestAnimationFrame(trajLoop);
+
+    }
+
+
+
+    /* ── 轨迹面板交互 ── */
+
+    function trajTogglePause() {
+
+      traj.recording = !traj.recording;
+
+      const btn = document.getElementById('trajPause');
+      if (btn) {
+        btn.innerText = traj.recording ? '暂停记录' : '继续记录';
+        btn.classList.toggle('on', !traj.recording);
+      }
+
+      appendLog('MAP', traj.recording
+
+        ? '继续记录轨迹'
+
+        : '已暂停记录（里程继续累计，恢复后从当前位置接着画）');
+
+    }
+
+
+
+    function trajToggleAuto() {
+
+      traj.autoFit = !traj.autoFit;
+
+      document.getElementById('trajAuto').classList.toggle('on', traj.autoFit);
+
+      if (traj.autoFit) { traj.panX = traj.panY = 0; traj.zoomMul = 1; }
+
+    }
+
+
+
+    function trajStamp() {
+
+      const d = new Date();
+
+      const p = n => String(n).padStart(2, '0');
+
+      return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+
+    }
+
+
+
+    function trajExportCsv() {
+
+      if (traj.pts.length < 2) { appendLog('MAP', '还没有轨迹可以导出'); return; }
+
+      const t0 = traj.pts[0].t || 0;
+
+      const rows = ['t_s,x_m,y_m,yaw_deg,v_mps,seg'];
+
+      for (const p of traj.pts) {
+
+        rows.push([
+
+          ((p.t - t0) / 1000).toFixed(3),
+
+          (p.x / 1000).toFixed(4),
+
+          (p.y / 1000).toFixed(4),
+
+          p.yaw.toFixed(1),
+
+          p.v.toFixed(3),
+
+          p.seg
+
+        ].join(','));
+
+      }
+
+      /* BOM 前缀：不然 Excel 用 GBK 打开中文表头会乱码 */
+
+      const blob = new Blob(['\ufeff' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+
+      const a = document.createElement('a');
+
+      a.href = URL.createObjectURL(blob);
+
+      a.download = `traj_${trajStamp()}.csv`;
+
+      a.click();
+
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+
+      appendLog('MAP', `已导出 ${traj.pts.length} 个轨迹点`);
+
+    }
+
+
+
+    function trajExportPng() {
+
+      const a = document.createElement('a');
+
+      a.href = trajCanvas.toDataURL('image/png');
+
+      a.download = `traj_${trajStamp()}.png`;
+
+      a.click();
+
+      appendLog('MAP', '已导出 PNG 轨迹图');
+
+    }
+
+
+
+    /* 里程清零：同时把轨迹归零，两者语义一致（新起点） */
+
+    function onClearOdo() {
+
+      sendCmd('2');
+
+      trajReset(true);
+
+    }
+
+
+
+    (function trajInit() {
+
+      trajResize();
+
+      trajReset(false);
+
+      window.addEventListener('resize', trajResize);
+
+
+
+      const wrap = document.getElementById('mapWrap');
+
+
+
+      wrap.addEventListener('wheel', (e) => {
+
+        e.preventDefault();
+
+        if (traj.autoFit) {
+
+          traj.autoFit = false;
+
+          document.getElementById('trajAuto').classList.remove('on');
+
+        }
+
+        const f = Math.pow(1.0015, -e.deltaY);
+
+        traj.zoomMul = Math.min(80, Math.max(0.12, traj.zoomMul * f));
+
+      }, { passive: false });
+
+
+
+      let drag = null;
+
+      wrap.addEventListener('pointerdown', (e) => {
+
+        drag = { x: e.clientX, y: e.clientY, px: traj.panX, py: traj.panY };
+
+        wrap.classList.add('dragging');
+
+        wrap.setPointerCapture(e.pointerId);
+
+      });
+
+      wrap.addEventListener('pointermove', (e) => {
+
+        if (!drag) return;
+
+        if (traj.autoFit) {
+
+          traj.autoFit = false;
+
+          document.getElementById('trajAuto').classList.remove('on');
+
+        }
+
+        traj.panX = drag.px + (e.clientX - drag.x);
+
+        traj.panY = drag.py + (e.clientY - drag.y);
+
+      });
+
+      const endDrag = () => { drag = null; wrap.classList.remove('dragging'); };
+
+      wrap.addEventListener('pointerup', endDrag);
+
+      wrap.addEventListener('pointercancel', endDrag);
+
+
+
+      wrap.addEventListener('dblclick', () => {
+
+        traj.autoFit = true;
+
+        traj.panX = traj.panY = 0;
+
+        traj.zoomMul = 1;
+
+        document.getElementById('trajAuto').classList.add('on');
+
+      });
+
+
+
+      requestAnimationFrame(trajLoop);
+
+    })();
+
+
+
+    /* ══════════════════════════════════════════════════════════════════
+
+     * 自动驾驶：回放原路 / 原路返回 / 记忆路线
+
+     *
+
+     * 指令用 !D:<L>,<R>#（连续差速），不用 !DIR 的四档掩码：
+
+     *   四档只能表达 8 种组合，"左轮 38% / 右轮 46%" 这种连续纠偏发不出去，
+
+     *   路径跟随会退化成 bang-bang 打锯齿。
+
+     *
+
+     * 控制环放在上位机：每收一帧遥测（20Hz）算一次，回一条占空比。
+
+     * 纯延迟 ≈ 一帧遥测(50ms) + 无线单程(20~60ms) ≈ 70~110ms。
+
+     *
+
+     * 物理边界（必须诚实）：
+
+     *   · 0.2~0.3 m/s 跟得很稳；>0.4 m/s 会因为百毫秒死区而画龙；
+
+     *   · 丢帧时车端 400ms 失手保护会自动刹车，不会飞车；
+
+     *   · 路径和定位在同一个"漂移坐标系"里，闭环只保证贴着记忆走，
+
+     *     不保证回到物理原点 —— 陀螺仪漂多少，终点就差多少。
+
+     * ══════════════════════════════════════════════════════════════════ */
+
+    const drive = {
+
+      active: false,
+
+      mode: '',          /* 'replay' | 'return' */
+
+      path: [],
+
+      idx: 0,
+
+      look: 280,         /* 前视距离 mm */
+
+      speed: 42,         /* 基础占空比 % */
+
+      turnDir: 1,        /* +1: 左轮加速 = 顺时针(右转)，由自检写入 */
+
+      pivot: false,      /* 当前是否处于"原地转"模式（迟滞用） */
+
+      thenPath: null,    /* 两段式：先回起点，到点后切到这条路线 */
+
+      t0: 0,
+
+      lastTx: 0
+
+    };
+
+
+
+    /* localStorage 在 file:// / 隐私模式下会直接抛异常，包一层兜底 */
+
+    function lsGet(k) {
+
+      try { return localStorage.getItem(k); } catch (e) { return null; }
+
+    }
+
+    function lsSet(k, v) {
+
+      try { localStorage.setItem(k, v); } catch (e) { /* 存不了就算了 */ }
+
+    }
+
+
+
+    (function () {
+
+      const s = parseInt(lsGet('traj_steer_dir') || '', 10);
+
+      if (s === 1 || s === -1) drive.turnDir = s;
+
+    })();
+
+
+
+    function setAutoState(txt) {
+
+      const el = document.getElementById('autoState');
+
+      if (el) el.innerText = txt;
+
+    }
+
+
+
+    /* 轨迹 -> 路点：稀释到约 45mm 一个点
+
+     * （20Hz@0.3m/s 相邻点才 15mm，全用纯属浪费算力，还会让前视点跳变） */
+
+    function routeBuild() {
+
+      const src = traj.pts;
+
+      if (src.length < 10) return null;
+
+      const pts = [];
+
+      let lx = null, ly = null;
+
+      for (let i = 0; i < src.length; i++) {
+
+        const p = src[i];
+
+        if (lx === null || Math.hypot(p.x - lx, p.y - ly) >= 45 || i === src.length - 1) {
+
+          pts.push({ x: p.x, y: p.y });
+
+          lx = p.x; ly = p.y;
+
+        }
+
+      }
+
+      return pts.length >= 4 ? pts : null;
+
+    }
+
+
+
+    function routeLength(pts) {
+
+      let len = 0;
+
+      for (let i = 1; i < pts.length; i++) {
+
+        len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+
+      }
+
+      return len;
+
+    }
+
+
+
+    /* 起一条路线：把当前位置接在最前面，避免"瞬移"到路点上去 */
+
+    function beginPath(route) {
+
+      const cur = traj.pts[traj.pts.length - 1];
+
+      drive.path = [{ x: cur.x, y: cur.y }].concat(route);
+
+      drive.idx = 0;
+
+      drive.pivot = false;
+
+      drive.t0 = Date.now();
+
+    }
+
+
+
+    function autoStart(mode, routeIn) {
+
+      if (drive.active) return;
+
+
+
+      let route = routeIn ? routeIn.map(p => ({ x: p.x, y: p.y })) : routeBuild();
+
+      if (!route) {
+
+        appendLog('AUTO', '轨迹太短（不足 4 个路点），先手动跑一段');
+
+        return;
+
+      }
+
+
+
+      const cur = traj.pts[traj.pts.length - 1];
+
+
+
+      if (mode === 'return') {
+
+        /* 找离当前位置最近的路径点，从那里掉头往回走 —— 这才是"原路返回"，
+
+         * 而不是先开到终点再折回来。 */
+
+        let best = 0, bd = Infinity;
+
+        for (let i = 0; i < route.length; i++) {
+
+          const dx = route[i].x - cur.x, dy = route[i].y - cur.y;
+
+          const d2 = dx * dx + dy * dy;
+
+          if (d2 < bd) { bd = d2; best = i; }
+
+        }
+
+        route = route.slice(0, best + 1).reverse();
+
+        if (route.length < 2) {
+
+          appendLog('AUTO', '离起点太近，没有可返回的路段');
+
+          return;
+
+        }
+
+      }
+
+
+
+      const sel = document.getElementById('autoSpeed');
+
+      drive.speed = parseInt(sel ? sel.value : '42', 10) || 42;
+
+      drive.look = 170 + drive.speed * 2.6;      /* 42% -> 280mm */
+
+
+
+      drive.mode = mode;
+
+      drive.active = true;
+
+      drive.thenPath = null;
+
+
+
+      /* 回放的关键细节：刚录完路线时车停在**终点**，如果直接从当前位置
+
+       * 起跑，第一帧就判定"到达"。所以先直线开回起点，到了再切换到正式路线。*/
+
+      if (mode === 'replay') {
+
+        const s0 = route[0];
+
+        const dStart = Math.hypot(s0.x - cur.x, s0.y - cur.y);
+
+        if (dStart > 250) {
+
+          drive.thenPath = route;
+
+          beginPath([{ x: s0.x, y: s0.y }]);
+
+          appendLog('AUTO', `车不在起点（距起点 ${(dStart / 1000).toFixed(2)}m）：` +
+
+            '先直线开回起点，再回放原路');
+
+          setAutoState('回起点…');
+
+          return;
+
+        }
+
+      }
+
+
+
+      beginPath(route);
+
+      const km = (routeLength(route) / 1000).toFixed(2);
+
+      setAutoState(mode === 'return' ? '返航中…' : '回放中…');
+
+      appendLog('AUTO', `${mode === 'return' ? '原路返回' : '回放原路'}启动：` +
+
+        `${route.length} 个路点 / 全长 ${km}m，基础占空比 ${drive.speed}%，前视 ${drive.look.toFixed(0)}mm`);
+
+    }
+
+
+
+    function autoStop(byUser) {
+
+      if (!drive.active) {
+
+        if (byUser) appendLog('AUTO', '当前没有在自动驾驶');
+
+        return;
+
+      }
+
+      drive.active = false;
+
+      drive.path = [];
+
+      drive.thenPath = null;
+
+      writeSerial('!D:0,0#');
+
+      setAutoState('待命');
+
+      if (byUser) appendLog('AUTO', '已停止自动驾驶，底盘刹车');
+
+    }
+
+
+
+    /* 人工操作优先：一动键盘/按钮就静默退出自动，
+
+     * 且**不再补发** !D:0,0（否则会和紧随其后的 !DIR 抢方向盘） */
+
+    function autoAbort(reason) {
+
+      if (!drive.active) return;
+
+      drive.active = false;
+
+      drive.path = [];
+
+      drive.thenPath = null;
+
+      setAutoState('已接管');
+
+      appendLog('AUTO', `${reason}，自动驾驶退出`);
+
+    }
+
+
+
+    /* 每帧遥测调用一次：纯跟踪 + 差速输出 */
+
+    function autoStep() {
+
+      if (!drive.active) return;
+
+      const path = drive.path;
+
+      if (path.length < 2) { autoStop(false); return; }
+
+
+
+      const p = traj.pts[traj.pts.length - 1];
+
+
+
+      /* 1) 在 idx 附近找最近路点（限制搜索窗口，防止"抄近道"穿到对面去） */
+
+      const from = Math.max(0, drive.idx - 8);
+
+      const to = Math.min(path.length, drive.idx + 60);
+
+      let best = drive.idx, bd = Infinity;
+
+      for (let i = from; i < to; i++) {
+
+        const dx = path[i].x - p.x, dy = path[i].y - p.y;
+
+        const d2 = dx * dx + dy * dy;
+
+        if (d2 < bd) { bd = d2; best = i; }
+
+      }
+
+      drive.idx = best;
+
+
+
+      /* 2) 沿路径量出前视点 */
+
+      let j = best, acc = 0;
+
+      while (j < path.length - 1 && acc < drive.look) {
+
+        acc += Math.hypot(path[j + 1].x - path[j].x, path[j + 1].y - path[j].y);
+
+        j++;
+
+      }
+
+
+
+      /* 3) 剩余弧长；到点就停 */
+
+      let remain = Math.hypot(path[j].x - p.x, path[j].y - p.y);
+
+      for (let i = j; i < path.length - 1; i++) {
+
+        remain += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
+
+      }
+
+
+
+      const endP = path[path.length - 1];
+
+      const dEnd = Math.hypot(endP.x - p.x, endP.y - p.y);
+
+      const arriveR = drive.thenPath ? 150 : 80;   /* 回起点那一段可以粗一点 */
+
+      if (dEnd < arriveR) {
+
+        if (drive.thenPath) {
+
+          /* 已到起点：切换到真正的记录路线，继续跑 */
+
+          const np = drive.thenPath;
+
+          drive.thenPath = null;
+
+          beginPath(np);
+
+          setAutoState('回放中…');
+
+          appendLog('AUTO', '已到起点，开始回放原路');
+
+          return;
+
+        }
+
+        drive.active = false;
+
+        drive.path = [];
+
+        writeSerial('!D:0,0#');
+
+        writeSerial(' ');                    /* 再补一条急停，确保刹车而不是滑行 */
+
+        setAutoState('已到达');
+
+        appendLog('AUTO', `到达终点（距终点 ${dEnd.toFixed(0)}mm）`);
+
+        return;
+
+      }
+
+      /* 保险：跑太久说明跟丢了，别让它一直绕 */
+
+      if (!drive.t0) drive.t0 = Date.now();
+
+      if (Date.now() - drive.t0 > 90000) {
+
+        autoStop(false);
+
+        writeSerial(' ');
+
+        setAutoState('超时');
+
+        appendLog('AUTO', '自动驾驶超过 90s 仍未到点，已强制停止（跟丢或卡住）');
+
+        return;
+
+      }
+
+
+
+      /* 4) 纯跟踪：目标方位 - 当前航向 = 航向误差（顺时针为正） */
+
+      const dx = path[j].x - p.x;
+
+      const dy = path[j].y - p.y;
+
+      if (Math.hypot(dx, dy) < 15) return;   /* 目标点就在脚下，本帧不出力 */
+
+      const want = Math.atan2(dx, dy) * 180 / Math.PI;
+
+      let err = want - traj.yaw;
+
+      while (err > 180) err -= 360;
+
+      while (err < -180) err += 360;
+
+
+
+      const aerr = Math.abs(err);
+
+      let left, right;
+
+
+
+      /* 5) 大偏差先**原地转**，小偏差才用"前进 + 差速"走弧线。
+
+       *
+
+       * 这一条是仿真实测出来的：只用差速纠 180° 时，前进量会把掉头
+
+       * 拉成一个大圈（差速上限只有十几 %，转弯半径几米），车会直接跑飞。
+
+       * 两个阈值（78 / 50）是迟滞，避免在阈值附近来回切换成抖动。 */
+
+      if (aerr > (drive.pivot ? 50 : 78)) {
+
+        drive.pivot = true;
+
+        const pw = Math.min(38, drive.speed * 0.85);
+
+        const sgn = err > 0 ? 1 : -1;
+
+        left = drive.turnDir * sgn * pw;
+
+        right = -drive.turnDir * sgn * pw;
+
+      } else {
+
+        drive.pivot = false;
+
+        let v = drive.speed * (1 - 0.35 * Math.min(1, aerr / 50));
+
+        v *= 0.55 + 0.45 * Math.min(1, remain / 500);   /* 快到终点收油 */
+
+        if (v < 33) v = 33;                             /* 低于 30% 会堵转 */
+
+
+
+        let turn = 1.1 * err;
+
+        const turnMax = Math.max(14, drive.speed - 17); /* 内轮允许掉到 ~17% */
+
+        if (turn > turnMax) turn = turnMax;
+
+        if (turn < -turnMax) turn = -turnMax;
+
+
+
+        left = v + drive.turnDir * turn;
+
+        right = v - drive.turnDir * turn;
+
+      }
+
+      left = Math.max(-100, Math.min(100, left));
+
+      right = Math.max(-100, Math.min(100, right));
+
+
+
+      writeSerial('!D:' + Math.round(left * 10) + ',' + Math.round(right * 10) + '#');
+
+
+
+      setAutoState((drive.mode === 'return' ? '返航 ' : '回放 ') +
+
+        (remain / 1000).toFixed(2) + 'm · 偏' + err.toFixed(0) + '°');
+
+    }
+
+
+
+    /* 转向极性自检：给一次已知差速，看航向往哪边变。
+
+     * 这样不用再靠"猜符号" —— 车的 INVERT 宏、左右电机位置、装车方向
+
+     * 任何一处变了，重跑一次自检就自动对齐。 */
+
+    async function autoCalibrate() {
+
+      const y0 = traj.yaw;
+
+      appendLog('AUTO', '转向极性自检：车会原地转一下，请确认已放在地上、周围留空');
+
+      setAutoState('自检中…');
+
+      /* 350‰ × 380ms：太快/太久会转过 180°，wrap 之后符号就判反了 */
+
+      await writeSerial('!D:350,-350#');
+
+      await new Promise(r => setTimeout(r, 380));
+
+      await writeSerial('!D:0,0#');
+
+      await new Promise(r => setTimeout(r, 160));
+
+
+
+      let dy = traj.yaw - y0;
+
+      while (dy > 180) dy -= 360;
+
+      while (dy < -180) dy += 360;
+
+
+
+      if (Math.abs(dy) < 3) {
+
+        appendLog('AUTO', '自检失败：陀螺仪几乎没动（车被架空了？）。暂按 turnDir=+1 运行，若反向请重跑自检');
+
+        setAutoState('待命');
+
+        return false;
+
+      }
+
+      drive.turnDir = dy > 0 ? 1 : -1;
+
+      lsSet('traj_steer_dir', String(drive.turnDir));
+
+      appendLog('AUTO', `自检完成：左正右负时航向变化 ${dy.toFixed(0)}° → turnDir=${drive.turnDir}`);
+
+      return true;
+
+    }
+
+
+
+    async function ensureSteerDir() {
+
+      if (lsGet('traj_steer_dir')) return true;
+
+      return await autoCalibrate();
+
+    }
+
+
+
+    async function autoReplay() {
+
+      if (drive.active) { autoStop(true); return; }
+
+      await ensureSteerDir();
+
+      autoStart('replay');
+
+    }
+
+
+
+    async function autoReturn() {
+
+      if (drive.active) { autoStop(true); return; }
+
+      await ensureSteerDir();
+
+      autoStart('return');
+
+    }
+
+
+
+    /* 记忆路线：存 localStorage，关掉页面也在 */
+
+    function routeSave() {
+
+      const route = routeBuild();
+
+      if (!route) { appendLog('AUTO', '轨迹太短，没法记忆'); return; }
+
+      lsSet('traj_route', JSON.stringify({ ts: Date.now(), pts: route }));
+
+      setAutoState('已记忆');
+
+      appendLog('AUTO', `已记忆路线：${route.length} 个路点 / 全长 ${(routeLength(route) / 1000).toFixed(2)}m`);
+
+    }
+
+
+
+    /* 把记忆路线旋转平移到"当前位姿"：
+
+     * 起始切线转到与当前车头一致、起点平移到当前坐标。
+
+     * 这样即使中途重新上过电（JY61P 航向重新归零），只要从同一起点、
+
+     * 同一朝向发车，"记忆路线"依然能跑。 */
+
+    function alignRoute(pts, x0, y0, yawNow) {
+
+      const p0 = pts[0];
+
+      const p1 = pts[Math.min(5, pts.length - 1)];
+
+      const rYaw = Math.atan2(p1.x - p0.x, p1.y - p0.y) * 180 / Math.PI;
+
+      const th = (yawNow - rYaw) * Math.PI / 180;
+
+      const c = Math.cos(th), s = Math.sin(th);
+
+      return pts.map(p => {
+
+        const dx = p.x - p0.x, dy = p.y - p0.y;
+
+        return { x: x0 + dx * c + dy * s, y: y0 + dy * c - dx * s };
+
+      });
+
+    }
+
+
+
+    function routeLoad() {
+
+      const raw = lsGet('traj_route');
+
+      if (!raw) { appendLog('AUTO', '还没有记忆路线，先手动跑一遍再点「记忆路线」'); return; }
+
+      let obj = null;
+
+      try { obj = JSON.parse(raw); } catch (e) { obj = null; }
+
+      if (!obj || !obj.pts || obj.pts.length < 4) { appendLog('AUTO', '记忆的路线无效'); return; }
+
+      if (drive.active) { autoStop(true); }
+
+
+
+      const cur = traj.pts[traj.pts.length - 1];
+
+      const route = alignRoute(obj.pts, cur.x, cur.y, traj.yaw);
+
+      appendLog('AUTO', `载入记忆路线（${route.length} 点，记于 ${new Date(obj.ts).toLocaleString()}）`);
+
+      autoStart('replay', route);
+
+    }
+
+
+
+    /* ── Canvas 实时示波器绘图 ── */
+
+    const canvas = document.getElementById('chartCanvas');
+
+    const ctx = canvas.getContext('2d');
+
+
+
+    function resizeCanvas() {
+
+      canvas.width = canvas.parentElement.clientWidth;
+
+      canvas.height = canvas.parentElement.clientHeight;
+
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    resizeCanvas();
+
+
+
+    function renderScope() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width;
+      const h = canvas.height;
+      if (w < 10 || h < 10) {
+        requestAnimationFrame(renderScope);
+        return;
+      }
+
+      /* 初始比例尺放宽：padY 留白防止波形贴边溢出，速度范围2.5，航向角范围220° */
+      const padY = 22;
+      const usableHalfH = Math.max(10, (h / 2) - padY);
+      const speedScale = 2.5; // 车速基准满量程 2.5 m/s
+      const yawScale = 220.0; // 航向角基准满量程 220° (确保 +-180° 永不溢出边界)
+
+      /* 浅灰细网格背景 */
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < h; y += 26) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+      for (let x = 0; x < w; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+
+      /* 零位中线 (白亮实线) */
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+
+      /* 右侧辅助刻度线与文字标定 */
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.font = '10px Consolas, monospace';
+      ctx.textAlign = 'right';
+
+      const yYawPos = (h / 2) - (180.0 / yawScale) * usableHalfH;
+      ctx.strokeStyle = 'rgba(255, 179, 0, 0.15)';
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(0, yYawPos); ctx.lineTo(w, yYawPos); ctx.stroke();
+      ctx.fillText('+180°', w - 6, yYawPos + 3);
+
+      const yYawNeg = (h / 2) + (180.0 / yawScale) * usableHalfH;
+      ctx.beginPath(); ctx.moveTo(0, yYawNeg); ctx.lineTo(w, yYawNeg); ctx.stroke();
+      ctx.fillText('-180°', w - 6, yYawNeg + 3);
+      ctx.setLineDash([]); // 恢复实线
+
+      ctx.fillText('0°/0v', w - 6, (h / 2) + 3);
+
+      /* 1. 速度曲线 (Cyan) */
+      ctx.strokeStyle = '#00f2fe';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < MAX_POINTS; i++) {
+        const x = (i / (MAX_POINTS - 1)) * (w - 55);
+        const val = historySpeed[i];
+        const y = Math.max(padY, Math.min(h - padY, (h / 2) - (val / speedScale) * usableHalfH));
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      /* 2. 航向角曲线 (Amber) */
+      ctx.strokeStyle = '#ffb300';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      for (let i = 0; i < MAX_POINTS; i++) {
+        const x = (i / (MAX_POINTS - 1)) * (w - 55);
+        const val = historyYaw[i];
+        const y = Math.max(padY, Math.min(h - padY, (h / 2) - (val / yawScale) * usableHalfH));
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      requestAnimationFrame(renderScope);
+    }
+
+    requestAnimationFrame(renderScope);
+
+  </script>
+
+</body>
+
+</html>
+

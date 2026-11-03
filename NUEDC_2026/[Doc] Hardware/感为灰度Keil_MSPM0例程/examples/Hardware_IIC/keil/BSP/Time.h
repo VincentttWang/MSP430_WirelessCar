@@ -1,0 +1,3 @@
+#include "ti_msp_dl_config.h"
+void delay_us(unsigned long __us) ;
+void delay_ms(unsigned long ms) ;

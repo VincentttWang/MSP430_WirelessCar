@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#070b12">
+<title>小车手机手柄</title>
+<style>
+  :root {
+    --bg: #070b12;
+    --card: rgba(16, 26, 40, 0.85);
+    --line: rgba(255, 255, 255, 0.09);
+    --cy: #00f2fe;
+    --gr: #00e676;
+    --rd: #ff3366;
+    --am: #ffb300;
+    --mut: #8899a6;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(0, 242, 254, 0.10) 0%, transparent 45%),
+      radial-gradient(circle at 85% 90%, rgba(179, 136, 255, 0.10) 0%, transparent 45%);
+    color: #e8f1f8;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  /* ── 顶部状态条 ── */
+  header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    background: rgba(8, 12, 20, 0.9);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 20px;
+    background: rgba(255, 51, 102, 0.15);
+    color: var(--rd);
+    border: 1px solid rgba(255, 51, 102, 0.35);
+    white-space: nowrap;
+    transition: all .25s;
+  }
+
+  .pill.on {
+    background: rgba(0, 230, 118, 0.15);
+    color: var(--gr);
+    border-color: rgba(0, 230, 118, 0.4);
+    box-shadow: 0 0 12px rgba(0, 230, 118, 0.25);
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  .hud {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    color: var(--mut);
+    white-space: nowrap;
+  }
+
+  .hud b {
+    color: #fff;
+    font-weight: 700;
+  }
+
+  /* ── 主体 ── */
+  main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .stick-zone {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .stick {
+    position: relative;
+    width: min(58vw, 42vh);
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(0, 242, 254, 0.06) 0%, rgba(5, 8, 14, 0.95) 70%);
+    border: 2px solid rgba(0, 242, 254, 0.22);
+    box-shadow: 0 0 26px rgba(0, 242, 254, 0.10), inset 0 0 30px rgba(0, 0, 0, 0.7);
+    touch-action: none;
+  }
+
+  /* 十字参考线 + 45° 扇区提示 */
+  .stick::before,
+  .stick::after {
+    content: "";
+    position: absolute;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .stick::before {
+    left: 50%;
+    top: 8%;
+    width: 1px;
+    height: 84%;
+    transform: translateX(-0.5px);
+  }
+
+  .stick::after {
+    top: 50%;
+    left: 8%;
+    height: 1px;
+    width: 84%;
+    transform: translateY(-0.5px);
+  }
+
+  .knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 40%;
+    height: 40%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle at 35% 30%, #1de9ff 0%, #0091a8 60%, #005f70 100%);
+    box-shadow: 0 0 20px rgba(0, 242, 254, 0.5), inset 0 -4px 10px rgba(0, 0, 0, 0.45);
+    transition: transform .08s ease-out, box-shadow .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    color: #04222a;
+    letter-spacing: 1px;
+  }
+
+  .knob.live {
+    box-shadow: 0 0 30px rgba(0, 242, 254, 0.9), inset 0 -4px 10px rgba(0, 0, 0, 0.45);
+    transition: none;
+  }
+
+  /* ── 右侧按钮列 ── */
+  .btns {
+    width: 34%;
+    max-width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .btn {
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.05);
+    color: #e8f1f8;
+    border-radius: 16px;
+    padding: 14px 6px;
+    font-size: 15px;
+    font-weight: 800;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    touch-action: none;
+    transition: transform .06s, background .15s;
+  }
+
+  .btn small {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--mut);
+    letter-spacing: .5px;
+  }
+
+  .btn:active {
+    transform: scale(0.96);
+  }
+
+  .btn.stop {
+    background: rgba(255, 51, 102, 0.18);
+    border-color: rgba(255, 51, 102, 0.45);
+    color: var(--rd);
+    padding: 22px 6px;
+    font-size: 18px;
+  }
+
+  .btn.stop:active {
+    background: var(--rd);
+    color: #fff;
+  }
+
+  .btn.run {
+    background: rgba(0, 230, 118, 0.14);
+    border-color: rgba(0, 230, 118, 0.4);
+    color: var(--gr);
+  }
+
+  .btn.run:active {
+    background: var(--gr);
+    color: #05210f;
+  }
+
+  /* ── 底部限速栏 ── */
+  footer {
+    flex: 0 0 auto;
+    padding: 6px 16px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: rgba(8, 12, 20, 0.9);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  footer .lab {
+    font-size: 12px;
+    color: var(--mut);
+    white-space: nowrap;
+  }
+
+  footer .val {
+    font-family: Consolas, monospace;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--am);
+    width: 46px;
+    text-align: right;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
+    touch-action: auto;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--cy);
+    box-shadow: 0 0 12px var(--cy);
+  }
+
+  /* ── 提示条 ── */
+  .toast {
+    position: fixed;
+    left: 50%;
+    top: 46%;
+    transform: translate(-50%, -50%) scale(0.96);
+    background: rgba(0, 0, 0, 0.82);
+    border: 1px solid var(--line);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 14px 18px;
+    border-radius: 14px;
+    max-width: 82vw;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 20;
+  }
+
+  .toast.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="pill" id="pill"><span class="dot"></span><span id="pillTxt">未连接</span></div>
+  <div class="hud">
+    <span>V <b id="hSpd">0.00</b></span>
+    <span>D <b id="hDist">0.0</b></span>
+    <span>Y <b id="hYaw">0</b></span>
+  </div>
+</header>
+
+<main>
+  <div class="stick-zone">
+    <div class="stick" id="stick">
+      <div class="knob" id="knob">停止</div>
+    </div>
+  </div>
+
+  <div class="btns">
+    <button class="btn stop" id="btnStop">停止<small>急停并刹车</small></button>
+    <button class="btn run" id="btnRun">启停<small>S1 · 切换 RUN</small></button>
+    <button class="btn" id="btnReset">清零<small>S2 · 里程航向</small></button>
+  </div>
+</main>
+
+<footer>
+  <span class="lab">限速</span>
+  <input type="range" id="spd" min="10" max="100" step="5" value="50">
+  <span class="val" id="spdVal">50%</span>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ══════════════════════════════════════════════════════════════════
+   * 手机手柄（走 web_server.py 的 HTTP 桥接，不用 Web Serial）
+   *
+   * 手机上没法用 Web Serial（只有 Chrome 桌面版才有），所以这里全部通过
+   * 电脑上的 Python 服务转发：
+   *   POST /api/send       下发 !DIR:mask# / 单字符
+   *   GET  /api/telemetry  10Hz 读回速度/里程/航向
+   *
+   * 方向用位掩码 !DIR: 而不是单字符，因为掩码天然支持"斜向"，
+   * 而且松手发 !DIR:0# 能立刻刹车，不用等 400ms 失手保护。
+   * ══════════════════════════════════════════════════════════════════ */
+  const DIR_FWD = 1, DIR_REV = 2, DIR_LEFT = 4, DIR_RIGHT = 8;
+
+  const stick = document.getElementById('stick');
+  const knob = document.getElementById('knob');
+  const pill = document.getElementById('pill');
+  const pillTxt = document.getElementById('pillTxt');
+  const toastEl = document.getElementById('toast');
+
+  let mask = 0;
+  let dragging = false;
+  let pointerId = null;
+  let lastTx = 0;
+  let tick = 0;
+  let portOpen = false;
+  let carOnline = false;
+
+  function toast(msg, ms) {
+    toastEl.innerText = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('show'), ms || 2200);
+  }
+
+  async function post(cmd) {
+    try {
+      await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: cmd })
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* ── 摇杆 ── */
+  const SECTOR = 0.34;      /* 进入某个方向的阈值（相对半径） */
+
+  function maskName(m) {
+    if (m === 0) return '停止';
+    const v = (m & DIR_FWD) ? '前' : ((m & DIR_REV) ? '后' : '');
+    const h = (m & DIR_LEFT) ? '左' : ((m & DIR_RIGHT) ? '右' : '');
+    if (v && h) return v + h;
+    if (v) return v + '进';
+    if (h) return h + '转';
+    return '停止';
+  }
+
+  function applyKnob(dx, dy) {
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+
+  function onMove(e) {
+    if (!dragging || e.pointerId !== pointerId) return;
+    const r = stick.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    let dx = e.clientX - cx;
+    let dy = e.clientY - cy;
+
+    const max = r.width / 2 - r.width * 0.20;   /* 摇杆最大位移 */
+    const len = Math.hypot(dx, dy);
+    if (len > max) {
+      dx = dx / len * max;
+      dy = dy / len * max;
+    }
+    applyKnob(dx, dy);
+
+    const nx = dx / max;
+    const ny = dy / max;
+
+    let m = 0;
+    if (ny < -SECTOR) m |= DIR_FWD;
+    if (ny > SECTOR) m |= DIR_REV;
+    if (nx < -SECTOR) m |= DIR_LEFT;
+    if (nx > SECTOR) m |= DIR_RIGHT;
+
+    if (m !== mask) {
+      mask = m;
+      knob.innerText = maskName(m);
+      knob.classList.toggle('live', m !== 0);
+      sendMask();                    /* 变化立刻发，不等下一个 tick */
+      if (m === 0) vibrate(8);
+    }
+  }
+
+  function sendMask() {
+    lastTx = Date.now();
+    post(`!DIR:${mask}#`);
+  }
+
+  function release() {
+    if (!dragging) return;
+    dragging = false;
+    pointerId = null;
+    applyKnob(0, 0);
+    knob.innerText = '停止';
+    knob.classList.remove('live');
+    if (mask !== 0) {
+      mask = 0;
+      sendMask();                    /* 松手立刻刹车（车端 !DIR:0 就是刹） */
+    }
+  }
+
+  stick.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    pointerId = e.pointerId;
+    try { stick.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件/老 Safari */ }
+    onMove(e);
+  });
+  stick.addEventListener('pointermove', onMove);
+  stick.addEventListener('pointerup', release);
+  stick.addEventListener('pointercancel', release);
+  stick.addEventListener('lostpointercapture', release);
+
+  /* ── 按钮 ── */
+  function vibrate(ms) {
+    if (navigator.vibrate) navigator.vibrate(ms);
+  }
+
+  const btnStop = document.getElementById('btnStop');
+  btnStop.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    mask = 0;
+    applyKnob(0, 0);
+    knob.innerText = '停止';
+    knob.classList.remove('live');
+    post('!DIR:0#');
+    setTimeout(() => post(' '), 20);       /* 空格 = 急停 + 状态回 STOP */
+    vibrate(30);
+    toast('已急停', 1200);
+  });
+
+  document.getElementById('btnRun').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    post('1');
+    vibrate(12);
+    toast('启停切换（S1）', 1200);
+  });
+
+  document.getElementById('btnReset').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    post('2');
+    vibrate(12);
+    toast('里程 / 航向已清零（S2）', 1500);
+  });
+
+  /* ── 限速 ── */
+  const spd = document.getElementById('spd');
+  const spdVal = document.getElementById('spdVal');
+  let spdTimer = null;
+
+  spd.addEventListener('input', () => {
+    spdVal.innerText = spd.value + '%';
+  });
+  spd.addEventListener('change', () => {
+    /* 松手才下发，避免拖动过程中刷几十条 */
+    clearTimeout(spdTimer);
+    spdTimer = setTimeout(() => post(`!SET:SPD=${spd.value}#`), 60);
+    vibrate(8);
+  });
+
+  /* ── 心跳 + 遥测 ── */
+  async function pollTelemetry() {
+    try {
+      const res = await fetch('/api/telemetry');
+      const j = await res.json();
+      portOpen = !!j.connected;
+      carOnline = !!j.online;
+
+      if (carOnline) {
+        pill.className = 'pill on';
+        pillTxt.innerText = '在线 ' + Math.round(j.age_ms || 0) + 'ms';
+        const d = j.data || {};
+        document.getElementById('hSpd').innerText = (d.speed || 0).toFixed(2);
+        document.getElementById('hDist').innerText = (d.dist || 0).toFixed(1);
+        document.getElementById('hYaw').innerText = Math.round(d.yaw || 0);
+      } else if (portOpen) {
+        pill.className = 'pill';
+        pillTxt.innerText = '等待小车…';
+      } else {
+        pill.className = 'pill';
+        pillTxt.innerText = '电脑未连串口';
+      }
+    } catch (e) {
+      pill.className = 'pill';
+      pillTxt.innerText = '电脑服务离线';
+    }
+  }
+
+  /* 100ms 一次：方向按住时每 200ms 补发（车端 400ms 失手保护） */
+  setInterval(() => {
+    tick++;
+    if (mask !== 0 && Date.now() - lastTx > 200) sendMask();
+    if (tick % 2 === 0) pollTelemetry();
+  }, 100);
+
+  /* 页面切到后台时松手，防止"揣兜里车自己跑" */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) release();
+  });
+  window.addEventListener('blur', release);
+
+  /* 屏幕常亮（部分浏览器需要用户手势之后才允许） */
+  let wakeLock = null;
+  async function keepAwake() {
+    try {
+      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) { /* 不支持就算了 */ }
+  }
+  document.addEventListener('pointerdown', keepAwake, { once: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') keepAwake();
+  });
+
+  pollTelemetry();
+  if (!location.protocol.startsWith('http')) {
+    toast('请通过电脑服务打开：<br>http://电脑IP:8080/mobile.html', 6000);
+  }
+</script>
+</body>
+</html>
