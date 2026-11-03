@@ -112,14 +112,15 @@ static PID_CONTROLLER s_speed_sync_pid;
 static volatile bool  s_straight_lock_active = false;
 static volatile float s_straight_target_yaw  = 0.0f;
 static volatile uint32_t s_last_turn_ms      = 0U;   /* 最后一次存在转弯动作 (A/D/弧线) 的时刻 */
+static volatile uint32_t s_straight_start_ms = 0U;   /* 本次直行点动开始时刻 (用于 45ms 起步静摩擦前馈) */
 
 static void AppRemoteCar_InitControllers(void){
     PID_CONFIG straight_cfg = {
-        .kp = 0.85f,
-        .ki = 0.02f,
-        .kd = 0.005f,
-        .integral_limit = 4.0f,
-        .output_limit = 12.0f,
+        .kp = 2.0f,          /* 比例增益：小角度偏差产生敏锐纠偏力矩 */
+        .ki = 0.06f,         /* 积分增益：消除左右电机固有装配摩擦不对称 */
+        .kd = 0.04f,         /* 微分增益 */
+        .integral_limit = 8.0f,
+        .output_limit = 22.0f,
         .mode = PID_MODE_POSITION
     };
     PID_Init(&s_straight_sync_pid, &straight_cfg);
@@ -202,19 +203,29 @@ static void AppRemoteCar_StraightSyncStep(float dt_s){
     while (yaw_err > 180.0f)  yaw_err -= 360.0f;
     while (yaw_err < -180.0f) yaw_err += 360.0f;
 
-    /* 航向死区滤波：地表颠簸或振动在 ±0.5° 内时不进行微小扰动纠偏，彻底杜绝小车抽搐 */
-    if (fabsf(yaw_err) < 0.5f){
-        yaw_err = 0.0f;
+    /* 超敏连续微死区：0.05°（对应轮距 150mm 下两轮位移仅 0.13mm）
+     * 消除原先 0.5° 大死区导致的短按微幅运动下完全不纠偏的缺陷 */
+    float eff_err = 0.0f;
+    if (yaw_err > 0.05f){
+        eff_err = yaw_err - 0.05f;
+    } else if (yaw_err < -0.05f){
+        eff_err = yaw_err + 0.05f;
     }
 
-    /* 航向锁定 PID 计算左右两轮差速纠偏量：
-     * 误差定义：目标(target)=yaw_err，反馈(feedback)=0.0f，因此 error = target - feedback = yaw_err。
-     * 当车向右偏 (yaw_err > 0) 时，产生正向纠偏量 (steer_corr > 0)，
-     * 作用于轮速：l = base + steer_corr, r = base - steer_corr。
-     * 由于 RC_STEER_SIGN 为 +1.0f (左轮增大、右轮减小时产生向左回转力矩)，
-     * 此输出构成负反馈闭环，将车头迅速拉回目标直线航向。
-     * 无论前进还是后退，差速旋转力矩方向均一致，无需对 yaw_err 取反。 */
-    float steer_corr = PID_Update(&s_straight_sync_pid, yaw_err, 0.0f, dt_s);
+    /* 航向锁定 PID 计算左右两轮差速纠偏量 */
+    float steer_corr = PID_Update(&s_straight_sync_pid, eff_err, 0.0f, dt_s);
+
+    /* 融合陀螺仪 Z 轴角速度直接微分阻尼 (Gyro Rate Damping)：
+     * 在一侧轮速稍快导致车身开始转动的最初 10ms 立即施加反向力矩，
+     * 彻底消除短按起步时的角加速度与两轮位移不均 */
+    float gyro_z = imu.gyro_deg_s.z;
+    if (fabsf(gyro_z) > 0.3f){
+        steer_corr += gyro_z * 0.06f;
+    }
+
+    /* 限制纠偏量上限 (±22%) */
+    if (steer_corr > 22.0f)  { steer_corr = 22.0f; }
+    if (steer_corr < -22.0f) { steer_corr = -22.0f; }
 
     /* 编码器闭环线速度辅助调控 (平滑低增益，避免 100ms 采样阶跃冲量) */
     float spd_setting = (float)s_speed_pct;
@@ -226,6 +237,14 @@ static void AppRemoteCar_StraightSyncStep(float dt_s){
     float speed_trim = PID_Update(&s_speed_sync_pid, target_mps, meas_mps, dt_s);
 
     float base_duty = v * spd_setting + v * speed_trim;
+
+    /* 起步静摩擦力前馈 (Stiction Breakaway Boost)：
+     * 短按起步最初 45ms 内，若设定速度极低 (如 5%)，临时提升至 18% 以克服齿轮箱静摩擦，
+     * 确保左右两电机在按键按下的瞬间同时破阻起动，消除"一侧已走、另一侧迟滞" */
+    uint32_t now_ms = BSP_Time_GetMs();
+    if ((now_ms - s_straight_start_ms) < 45U && fabsf(base_duty) < 18.0f){
+        base_duty = (v > 0.0f) ? 18.0f : -18.0f;
+    }
 
     /* 左右轮对称分配：左轮 +corr，右轮 -corr */
     float l = base_duty + (steer_corr * RC_STEER_SIGN);
@@ -277,6 +296,13 @@ static void AppRemoteCar_MixAndDrive(uint8_t mask){
             s_straight_lock_active = false;
             AppRemoteCar_Drive(base, base);
             return;
+        }
+
+        /* 起步静摩擦力前馈 (Stiction Breakaway Boost)：
+         * 短按起步最初 45ms 内，若设定速度极低 (如 5%)，临时提升至 18% 以克服齿轮箱静摩擦，
+         * 确保左右两电机在按键按下的瞬间同时破阻起动 */
+        if ((now_ms - s_straight_start_ms) < 45U && fabsf(base) < 18.0f){
+            base = (v > 0.0f) ? 18.0f : -18.0f;
         }
 
         /* 暂停转弯 250ms 之后底盘完全平稳，以此刻稳定的实际航向角作为直行闭环校准起点！ */
@@ -368,8 +394,14 @@ static void AppRemoteCar_ApplyDir(uint8_t mask){
     /* 手动方向指令触发：自动由循线模式接管为手动 RUN 模式 */
     s_car_state = 1U;
     s_reset_action_ms = 0U;
+    bool was_stopped = !s_motion_active;
     s_motion_active = true;
     s_last_motion_ms = BSP_Time_GetMs();
+
+    /* 从停止状态启动纯直行点动：记录起动时刻，赋能 45ms 静摩擦破除脉冲 */
+    if (was_stopped && (mask & (RC_DIR_FWD | RC_DIR_REV)) && !(mask & (RC_DIR_LEFT | RC_DIR_RIGHT))){
+        s_straight_start_ms = s_last_motion_ms;
+    }
 
     if (mask & (RC_DIR_LEFT | RC_DIR_RIGHT)){
         s_last_turn_ms = BSP_Time_GetMs();
