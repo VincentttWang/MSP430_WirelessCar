@@ -105,11 +105,13 @@ static volatile uint32_t s_last_msp_ms = 0U;
  * 避免"灯说连上、仪表说 DISC"这种两个指示器各算一套的问题。 */
 /* ── 直行双轮同步 (航向锁) 与编码器闭环控速控制器 ── */
 #define RC_MAX_SPEED_MPS         0.85f   /* 100% 满速理论线速度 ~0.85 m/s */
+#define RC_TURN_SETTLE_MS        250U    /* 暂停转弯后底盘旋转惯性释放与姿态平稳窗口 (250ms) */
 
 static PID_CONTROLLER s_straight_sync_pid;
 static PID_CONTROLLER s_speed_sync_pid;
 static volatile bool  s_straight_lock_active = false;
 static volatile float s_straight_target_yaw  = 0.0f;
+static volatile uint32_t s_last_turn_ms      = 0U;   /* 最后一次存在转弯动作 (A/D/弧线) 的时刻 */
 
 static void AppRemoteCar_InitControllers(void){
     PID_CONFIG straight_cfg = {
@@ -176,6 +178,12 @@ static float AppRemoteCar_SpeedRatio(void){
 /* 直行两轮闭环同步与编码器控速步进函数 */
 static void AppRemoteCar_StraightSyncStep(float dt_s){
     if (!s_straight_lock_active){
+        return;
+    }
+
+    /* 安全防线：如果存在左右转向分量，绝不执行直行差速纠偏，彻底杜绝转弯时对抗摆头 */
+    if (s_last_dir_mask & (RC_DIR_LEFT | RC_DIR_RIGHT)){
+        s_straight_lock_active = false;
         return;
     }
 
@@ -258,8 +266,20 @@ static void AppRemoteCar_MixAndDrive(uint8_t mask){
         return;
     }
 
-    /* 情况 2: 纯直行 (前进或后退，无转向分量) -> 启用航向与编码器双轮同步闭环 */
+    /* 情况 2: 纯直行 (前进或后退，无转向分量) */
     if (fabsf(v) > 0.1f && fabsf(w) < 0.1f){
+        uint32_t now_ms = BSP_Time_GetMs();
+        float base = v * speed;
+
+        /* 若距离上一次转弯动作结束尚不足 250ms (底盘仍处于转弯角动量释放与滑动过渡期)：
+         * 保持纯对称开环驱动，不强行施加直行差速纠偏，避免与转弯残余惯性对抗发生摆头 */
+        if ((now_ms - s_last_turn_ms) < RC_TURN_SETTLE_MS){
+            s_straight_lock_active = false;
+            AppRemoteCar_Drive(base, base);
+            return;
+        }
+
+        /* 暂停转弯 250ms 之后底盘完全平稳，以此刻稳定的实际航向角作为直行闭环校准起点！ */
         if (!s_straight_lock_active){
             WIT_IMU_DATA imu = {0};
             (void)WitGetData(&imu);
@@ -268,18 +288,16 @@ static void AppRemoteCar_MixAndDrive(uint8_t mask){
             PID_Reset(&s_straight_sync_pid);
             PID_Reset(&s_speed_sync_pid);
 
-            /* 初始瞬间直接平滑起步输出对称基础动力，避免等待首个 20ms 周期 */
-            float base = v * speed;
             AppRemoteCar_Drive(base, base);
         }
-        /* 此处不要调用 AppRemoteCar_StraightSyncStep(0.02f)！
-         * 串口每 200ms 下发指令，若在此处同步触发 PID 会与 50Hz 定时循环发生调用碰撞(<1ms)，
-         * 引发微分项爆炸与周期性抽搐。交由 App_RunRemoteCarTask 中的 20ms 定时循环纯净推进。 */
         return;
     }
 
-    /* 带有转向分量时，释放直行锁 */
+    /* 带有转向分量时：刷新转弯时间戳，完全释放直行锁并重置 PID，保证手动转弯手感纯净自由 */
+    s_last_turn_ms = BSP_Time_GetMs();
     s_straight_lock_active = false;
+    PID_Reset(&s_straight_sync_pid);
+    PID_Reset(&s_speed_sync_pid);
 
     /* 情况 3: 原地旋转 (无直行分量，只有左转或右转)
      * 旋转速度严格与当前设定速度成比例 (0.70x 系数)，保证低速轻柔可控、高速迅速，不再急转暴冲 */
@@ -352,6 +370,12 @@ static void AppRemoteCar_ApplyDir(uint8_t mask){
     s_reset_action_ms = 0U;
     s_motion_active = true;
     s_last_motion_ms = BSP_Time_GetMs();
+
+    if (mask & (RC_DIR_LEFT | RC_DIR_RIGHT)){
+        s_last_turn_ms = BSP_Time_GetMs();
+        s_straight_lock_active = false;
+        PID_Reset(&s_straight_sync_pid);
+    }
 
     if (mask & RC_DIR_FWD){
         act = (mask & RC_DIR_LEFT) ? "FWD+L" : ((mask & RC_DIR_RIGHT) ? "FWD+R" : "FWD");
@@ -906,13 +930,38 @@ void App_RunRemoteCarTask(void){
             }
         }
 
-        /* 遥控直行状态 50Hz 闭环同步控速 (双轮速度闭环同步保持直线) */
+        /* 遥控直行状态 50Hz 闭环同步控速 (双轮速度闭环同步保持直线)
+         * 核心：转弯期间绝不干涉；暂停转弯 250ms 后以稳定新航向为基准自动无缝闭环 */
         static uint32_t s_last_sync_loop_ms = 0U;
-        if (s_car_state == 1U && s_motion_active && s_straight_lock_active &&
-            (now - s_last_sync_loop_ms) >= 20U){
+        if (s_car_state == 1U && s_motion_active && (now - s_last_sync_loop_ms) >= 20U){
             float dt_s = (s_last_sync_loop_ms == 0U) ? 0.02f : ((float)(now - s_last_sync_loop_ms) / 1000.0f);
             s_last_sync_loop_ms = now;
-            AppRemoteCar_StraightSyncStep(dt_s);
+
+            /* 判断当前指令是否为纯直行 (无左右转向分量) */
+            bool is_pure_straight = ((s_last_dir_mask & (RC_DIR_FWD | RC_DIR_REV)) != 0U) &&
+                                    ((s_last_dir_mask & (RC_DIR_LEFT | RC_DIR_RIGHT)) == 0U);
+
+            if (is_pure_straight){
+                if (!s_straight_lock_active){
+                    /* 检查转弯结束过渡期是否已满 250ms */
+                    if ((now - s_last_turn_ms) >= RC_TURN_SETTLE_MS){
+                        /* 暂停转弯之后的一时刻：精准校准并锁定当前稳定航向角为直行闭环起点！ */
+                        WIT_IMU_DATA imu = {0};
+                        (void)WitGetData(&imu);
+                        s_straight_target_yaw = imu.attitude_deg.yaw;
+                        s_straight_lock_active = true;
+                        PID_Reset(&s_straight_sync_pid);
+                        PID_Reset(&s_speed_sync_pid);
+                    }
+                } else {
+                    /* 航向已平稳锁定，执行 50Hz 直行差速纠偏 */
+                    AppRemoteCar_StraightSyncStep(dt_s);
+                }
+            } else {
+                /* 只要存在转向分量，直行闭环完全避让退出，并持续刷新转弯时刻 */
+                s_last_turn_ms = now;
+                s_straight_lock_active = false;
+            }
         }
 
         /* 循线模式（TRACK, s_car_state == 2）50Hz 闭环控制 */
