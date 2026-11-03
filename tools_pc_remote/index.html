@@ -4973,29 +4973,27 @@
      * ══════════════════════════════════════════════════════════════════ */
 
     const drive = {
-
       active: false,
-
       mode: '',          /* 'replay' | 'return' */
-
+      state: 'idle',     /* 'idle' | 'align' | 'track' */
       path: [],
-
       idx: 0,
-
       look: 280,         /* 前视距离 mm */
-
       speed: 42,         /* 基础占空比 % */
-
       turnDir: 1,        /* +1: 左轮加速 = 顺时针(右转)，由自检写入 */
-
-      pivot: false,      /* 当前是否处于"原地转"模式（迟滞用） */
-
+      pivot: false,      /* 原地转过渡标志 */
       thenPath: null,    /* 两段式：先回起点，到点后切到这条路线 */
-
       t0: 0,
-
-      lastTx: 0
-
+      lastTx: 0,
+      /* 增强平滑控制器参数与状态 (彻底根除 1 秒一抖与跑飞) */
+      lastErr: 0,
+      integral: 0,
+      dFilt: 0,
+      lastTime: 0,
+      outL: 0,
+      outR: 0,
+      alignDoneCount: 0,
+      largeErrCount: 0
     };
 
 
@@ -5088,398 +5086,316 @@
 
     /* 起一条路线：把当前位置接在最前面，避免"瞬移"到路点上去 */
 
+    /* 起一条路线：把当前位置接在最前面，避免"瞬移"到路点上去 */
     function beginPath(route) {
-
       const cur = traj.pts[traj.pts.length - 1];
-
       drive.path = [{ x: cur.x, y: cur.y }].concat(route);
-
       drive.idx = 0;
-
       drive.pivot = false;
-
       drive.t0 = Date.now();
-
+      drive.lastTime = Date.now();
+      drive.lastErr = 0;
+      drive.integral = 0;
+      drive.dFilt = 0;
+      drive.outL = 0;
+      drive.outR = 0;
+      drive.alignDoneCount = 0;
+      drive.largeErrCount = 0;
     }
-
-
 
     function autoStart(mode, routeIn) {
-
       if (drive.active) return;
 
-
-
       let route = routeIn ? routeIn.map(p => ({ x: p.x, y: p.y })) : routeBuild();
-
       if (!route) {
-
         appendLog('AUTO', '轨迹太短（不足 4 个路点），先手动跑一段');
-
         return;
-
       }
-
-
 
       const cur = traj.pts[traj.pts.length - 1];
 
-
-
       if (mode === 'return') {
-
         /* 找离当前位置最近的路径点，从那里掉头往回走 —— 这才是"原路返回"，
-
          * 而不是先开到终点再折回来。 */
-
         let best = 0, bd = Infinity;
-
         for (let i = 0; i < route.length; i++) {
-
           const dx = route[i].x - cur.x, dy = route[i].y - cur.y;
-
           const d2 = dx * dx + dy * dy;
-
           if (d2 < bd) { bd = d2; best = i; }
-
         }
-
         route = route.slice(0, best + 1).reverse();
-
         if (route.length < 2) {
-
           appendLog('AUTO', '离起点太近，没有可返回的路段');
-
           return;
-
         }
-
       }
-
-
 
       const sel = document.getElementById('autoSpeed');
-
       drive.speed = parseInt(sel ? sel.value : '42', 10) || 42;
-
       drive.look = 170 + drive.speed * 2.6;      /* 42% -> 280mm */
 
-
-
       drive.mode = mode;
-
       drive.active = true;
-
       drive.thenPath = null;
-
-
 
       /* 回放的关键细节：刚录完路线时车停在**终点**，如果直接从当前位置
-
        * 起跑，第一帧就判定"到达"。所以先直线开回起点，到了再切换到正式路线。*/
-
       if (mode === 'replay') {
-
         const s0 = route[0];
-
         const dStart = Math.hypot(s0.x - cur.x, s0.y - cur.y);
-
         if (dStart > 250) {
-
           drive.thenPath = route;
-
           beginPath([{ x: s0.x, y: s0.y }]);
-
+          drive.state = 'align';
           appendLog('AUTO', `车不在起点（距起点 ${(dStart / 1000).toFixed(2)}m）：` +
-
-            '先直线开回起点，再回放原路');
-
+            '先对齐并直线开回起点，再回放原路');
           setAutoState('回起点…');
-
           return;
-
         }
-
       }
-
-
 
       beginPath(route);
-
+      /* 核心平滑机制：原路返回模式先进入原地平稳掉头对齐阶段，
+       * 对齐至与返回航向误差 <=18° 内再切入平稳贴线循迹，彻底根除边走边大幅转弯引起的隔秒抖动与晃荡 */
+      drive.state = (mode === 'return') ? 'align' : 'track';
       const km = (routeLength(route) / 1000).toFixed(2);
-
-      setAutoState(mode === 'return' ? '返航中…' : '回放中…');
-
+      setAutoState(mode === 'return' ? '掉头中…' : '回放中…');
       appendLog('AUTO', `${mode === 'return' ? '原路返回' : '回放原路'}启动：` +
-
         `${route.length} 个路点 / 全长 ${km}m，基础占空比 ${drive.speed}%，前视 ${drive.look.toFixed(0)}mm`);
-
     }
-
-
 
     function autoStop(byUser) {
-
       if (!drive.active) {
-
         if (byUser) appendLog('AUTO', '当前没有在自动驾驶');
-
         return;
-
       }
-
       drive.active = false;
-
+      drive.state = 'idle';
       drive.path = [];
-
       drive.thenPath = null;
-
+      drive.outL = 0;
+      drive.outR = 0;
       writeSerial('!D:0,0#');
-
       setAutoState('待命');
-
       if (byUser) appendLog('AUTO', '已停止自动驾驶，底盘刹车');
-
     }
-
-
 
     /* 人工操作优先：一动键盘/按钮就静默退出自动，
-
      * 且**不再补发** !D:0,0（否则会和紧随其后的 !DIR 抢方向盘） */
-
     function autoAbort(reason) {
-
       if (!drive.active) return;
-
       drive.active = false;
-
+      drive.state = 'idle';
       drive.path = [];
-
       drive.thenPath = null;
-
+      drive.outL = 0;
+      drive.outR = 0;
       setAutoState('已接管');
-
       appendLog('AUTO', `${reason}，自动驾驶退出`);
-
     }
 
-
-
-    /* 每帧遥测调用一次：纯跟踪 + 差速输出 */
-
+    /* 每帧遥测调用一次：两阶段状态机(对齐/贴线) + Stanley横向补偿 + 滤波微分PID + 斜率平滑输出 */
     function autoStep() {
-
       if (!drive.active) return;
-
       const path = drive.path;
-
       if (path.length < 2) { autoStop(false); return; }
-
-
 
       const p = traj.pts[traj.pts.length - 1];
 
-
-
       /* 1) 在 idx 附近找最近路点（限制搜索窗口，防止"抄近道"穿到对面去） */
-
-      const from = Math.max(0, drive.idx - 8);
-
-      const to = Math.min(path.length, drive.idx + 60);
-
+      const from = Math.max(0, drive.idx - 6);
+      const to = Math.min(path.length, drive.idx + 45);
       let best = drive.idx, bd = Infinity;
-
       for (let i = from; i < to; i++) {
-
         const dx = path[i].x - p.x, dy = path[i].y - p.y;
-
         const d2 = dx * dx + dy * dy;
-
         if (d2 < bd) { bd = d2; best = i; }
-
       }
-
       drive.idx = best;
 
-
-
       /* 2) 沿路径量出前视点 */
-
       let j = best, acc = 0;
-
       while (j < path.length - 1 && acc < drive.look) {
-
         acc += Math.hypot(path[j + 1].x - path[j].x, path[j + 1].y - path[j].y);
-
         j++;
-
       }
-
-
 
       /* 3) 剩余弧长；到点就停 */
-
       let remain = Math.hypot(path[j].x - p.x, path[j].y - p.y);
-
       for (let i = j; i < path.length - 1; i++) {
-
         remain += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
-
       }
 
-
-
       const endP = path[path.length - 1];
-
       const dEnd = Math.hypot(endP.x - p.x, endP.y - p.y);
-
       const arriveR = drive.thenPath ? 150 : 80;   /* 回起点那一段可以粗一点 */
-
       if (dEnd < arriveR) {
-
         if (drive.thenPath) {
-
           /* 已到起点：切换到真正的记录路线，继续跑 */
-
           const np = drive.thenPath;
-
           drive.thenPath = null;
-
           beginPath(np);
-
+          drive.state = 'track';
           setAutoState('回放中…');
-
           appendLog('AUTO', '已到起点，开始回放原路');
-
           return;
-
         }
-
         drive.active = false;
-
+        drive.state = 'idle';
         drive.path = [];
-
         writeSerial('!D:0,0#');
-
         writeSerial(' ');                    /* 再补一条急停，确保刹车而不是滑行 */
-
         setAutoState('已到达');
-
         appendLog('AUTO', `到达终点（距终点 ${dEnd.toFixed(0)}mm）`);
-
         return;
-
       }
 
       /* 保险：跑太久说明跟丢了，别让它一直绕 */
-
       if (!drive.t0) drive.t0 = Date.now();
-
       if (Date.now() - drive.t0 > 90000) {
-
         autoStop(false);
-
         writeSerial(' ');
-
         setAutoState('超时');
-
-        appendLog('AUTO', '自动驾驶超过 90s 仍未到点，已强制停止（跟丢或卡住）');
-
+        appendLog('AUTO', '自动驾驶超过 90s 仍未到点，已强制停止');
         return;
-
       }
 
-
-
-      /* 4) 纯跟踪：目标方位 - 当前航向 = 航向误差（顺时针为正） */
-
-      const dx = path[j].x - p.x;
-
-      const dy = path[j].y - p.y;
-
-      if (Math.hypot(dx, dy) < 15) return;   /* 目标点就在脚下，本帧不出力 */
-
-      const want = Math.atan2(dx, dy) * 180 / Math.PI;
-
+      /* 4) 航向误差与目标方位计算 */
+      let lookDx = path[j].x - p.x;
+      let lookDy = path[j].y - p.y;
+      if (Math.hypot(lookDx, lookDy) < 15) {
+        if (j < path.length - 1) {
+          lookDx = path[j + 1].x - p.x;
+          lookDy = path[j + 1].y - p.y;
+        }
+      }
+      const want = Math.atan2(lookDx, lookDy) * 180 / Math.PI;
       let err = want - traj.yaw;
-
       while (err > 180) err -= 360;
-
       while (err < -180) err += 360;
-
-
-
       const aerr = Math.abs(err);
 
-      let left, right;
+      /* 5) 阶段一：原地平稳掉头对齐状态 (align)
+       * 原路掉头时只做就地平滑自旋，误差收敛至 <=18° 且连续 2 帧稳定后才进入贴线模式。
+       * 彻底解决在 50°~78° 迟滞带附近“边走边甩尾”导致的 1 秒一抖一抖周期性振荡。 */
+      if (drive.state === 'align') {
+        if (aerr <= 18) {
+          drive.alignDoneCount = (drive.alignDoneCount || 0) + 1;
+          if (drive.alignDoneCount >= 2) {
+            drive.state = 'track';
+            drive.lastErr = err;
+            drive.integral = 0;
+            drive.dFilt = 0;
+            drive.lastTime = Date.now();
+            drive.outL = 0;
+            drive.outR = 0;
+            appendLog('AUTO', `掉头对齐完成（残差 ${err.toFixed(1)}°），开始平稳贴线返航`);
+          }
+        } else {
+          drive.alignDoneCount = 0;
+        }
 
+        if (drive.state === 'align') {
+          const sgn = err > 0 ? 1 : -1;
+          /* 旋转功率带柔和非线性减速：180° 时约 35%，靠近 20° 时平缓降至 23%，防止过冲摆头 */
+          const pwr = 23 + Math.min(13, aerr * 0.18);
+          const targetL = drive.turnDir * sgn * pwr;
+          const targetR = -drive.turnDir * sgn * pwr;
 
+          /* 输出平滑滤波，消除急起急停电机颤抖 */
+          drive.outL = (drive.outL || 0) * 0.5 + targetL * 0.5;
+          drive.outR = (drive.outR || 0) * 0.5 + targetR * 0.5;
 
-      /* 5) 大偏差先**原地转**，小偏差才用"前进 + 差速"走弧线。
-
-       *
-
-       * 这一条是仿真实测出来的：只用差速纠 180° 时，前进量会把掉头
-
-       * 拉成一个大圈（差速上限只有十几 %，转弯半径几米），车会直接跑飞。
-
-       * 两个阈值（78 / 50）是迟滞，避免在阈值附近来回切换成抖动。 */
-
-      if (aerr > (drive.pivot ? 50 : 78)) {
-
-        drive.pivot = true;
-
-        const pw = Math.min(38, drive.speed * 0.85);
-
-        const sgn = err > 0 ? 1 : -1;
-
-        left = drive.turnDir * sgn * pw;
-
-        right = -drive.turnDir * sgn * pw;
-
-      } else {
-
-        drive.pivot = false;
-
-        let v = drive.speed * (1 - 0.35 * Math.min(1, aerr / 50));
-
-        v *= 0.55 + 0.45 * Math.min(1, remain / 500);   /* 快到终点收油 */
-
-        if (v < 33) v = 33;                             /* 低于 30% 会堵转 */
-
-
-
-        let turn = 1.1 * err;
-
-        const turnMax = Math.max(14, drive.speed - 17); /* 内轮允许掉到 ~17% */
-
-        if (turn > turnMax) turn = turnMax;
-
-        if (turn < -turnMax) turn = -turnMax;
-
-
-
-        left = v + drive.turnDir * turn;
-
-        right = v - drive.turnDir * turn;
-
+          writeSerial('!D:' + Math.round(drive.outL * 10) + ',' + Math.round(drive.outR * 10) + '#');
+          setAutoState(`掉头中 · 差 ${aerr.toFixed(0)}°`);
+          return;
+        }
       }
 
-      left = Math.max(-100, Math.min(100, left));
+      /* 6) 阶段二：平稳贴线跟踪状态 (track)
+       * 计算横向偏距 (Cross-Track Error, 离路径中心线的垂直距离)，
+       * 结合 Stanley 算法与前视航向误差，确保小车能死死贴合原轨迹 */
+      let pA = path[best];
+      let pB = (best < path.length - 1) ? path[best + 1] : (best > 0 ? path[best] : path[0]);
+      if (best === path.length - 1 && best > 0) {
+        pA = path[best - 1];
+        pB = path[best];
+      }
+      const segDx = pB.x - pA.x;
+      const segDy = pB.y - pA.y;
+      const segLen = Math.hypot(segDx, segDy);
+      let crossDist = 0;
+      if (segLen > 1) {
+        /* 二维叉乘得到车距路径段的有符号垂直偏距 (mm) */
+        crossDist = (segDx * (p.y - pA.y) - segDy * (p.x - pA.x)) / segLen;
+      }
+      /* 横向切回角补偿：偏距越大，引导小车以一定切角平滑回归中心线，限幅 ±18° */
+      const crossCorrection = Math.max(-18, Math.min(18, crossDist * 0.12));
 
-      right = Math.max(-100, Math.min(100, right));
+      let fusedErr = err + crossCorrection;
+      while (fusedErr > 180) fusedErr -= 360;
+      while (fusedErr < -180) fusedErr += 360;
 
+      /* 若由于外力强烈碰撞导致偏航超过 85° 达 5 帧以上，才重新触发对齐，避免单帧噪点误切 */
+      if (Math.abs(err) > 85) {
+        drive.largeErrCount = (drive.largeErrCount || 0) + 1;
+        if (drive.largeErrCount > 5) {
+          drive.state = 'align';
+          drive.largeErrCount = 0;
+          appendLog('AUTO', '偏航过大，重新原地平稳对齐');
+          return;
+        }
+      } else {
+        drive.largeErrCount = 0;
+      }
 
+      /* 7) 连续时间 PID 控制器（含微分滤波，抑制机械与通信延迟诱发的画龙与振荡） */
+      const now = Date.now();
+      const dt = Math.max(0.02, Math.min(0.15, (drive.lastTime ? (now - drive.lastTime) : 50) / 1000));
+      drive.lastTime = now;
 
-      writeSerial('!D:' + Math.round(left * 10) + ',' + Math.round(right * 10) + '#');
+      const rawD = (fusedErr - (drive.lastErr || 0)) / dt;
+      drive.lastErr = fusedErr;
+      /* 微分低通滤波 */
+      drive.dFilt = (drive.dFilt || 0) * 0.65 + rawD * 0.35;
 
+      /* 积分防饱和累计 (仅在小误差时工作) */
+      if (Math.abs(fusedErr) < 22) {
+        drive.integral = Math.max(-25, Math.min(25, (drive.integral || 0) + fusedErr * dt));
+      } else {
+        drive.integral = 0;
+      }
 
+      const Kp = 0.72;
+      const Ki = 0.04;
+      const Kd = 0.052;
+      let turn = Kp * fusedErr + Ki * drive.integral + Kd * drive.dFilt;
+
+      /* 8) 速度规划与差速输出平滑 */
+      const aFused = Math.abs(fusedErr);
+      /* 大弯适度减速提高舵效，终点前平稳收油 */
+      let v = drive.speed * (1.0 - 0.28 * Math.min(1.0, aFused / 45.0));
+      v *= (0.55 + 0.45 * Math.min(1.0, remain / 450.0));
+      if (v < 30) v = 30;
+
+      /* 差速限幅：保留内轮转速，绝不锁死单轮，保持行进流畅度 */
+      const turnMax = Math.max(12, drive.speed - 16);
+      turn = Math.max(-turnMax, Math.min(turnMax, turn));
+
+      const targetL = v + drive.turnDir * turn;
+      const targetR = v - drive.turnDir * turn;
+
+      /* 斜率限制器 (Slew-Rate Filter)：每帧平稳过渡，告别骤升骤降与抖动 */
+      drive.outL = (drive.outL || v) * 0.65 + targetL * 0.35;
+      drive.outR = (drive.outR || v) * 0.65 + targetR * 0.35;
+
+      const outLClamped = Math.max(-100, Math.min(100, drive.outL));
+      const outRClamped = Math.max(-100, Math.min(100, drive.outR));
+
+      writeSerial('!D:' + Math.round(outLClamped * 10) + ',' + Math.round(outRClamped * 10) + '#');
 
       setAutoState((drive.mode === 'return' ? '返航 ' : '回放 ') +
-
-        (remain / 1000).toFixed(2) + 'm · 偏' + err.toFixed(0) + '°');
-
+        (remain / 1000).toFixed(2) + 'm · 偏' + fusedErr.toFixed(0) + '° · 距线' + crossDist.toFixed(0) + 'mm');
     }
 
 

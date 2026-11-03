@@ -631,6 +631,10 @@ static void AppRemoteCar_ParsePacketCommand(const char *pkt, uint8_t src){
             s_last_cmd_ms = BSP_Time_GetMs();
             s_car_state = 1U;
             s_reset_action_ms = 0U;
+            /* 收到上位机连续差速指令 !D 时，清空直行闭环标志与方向掩码，
+             * 防止与 50Hz 直行同步控速(AppRemoteCar_StraightSyncStep)抢夺控制权 */
+            s_last_dir_mask = 0U;
+            s_straight_lock_active = false;
 
             if (dl == 0.0f && dr == 0.0f){
                 /* 显式停车：解除"允许出力"，让后续失联保护不被误触发 */
