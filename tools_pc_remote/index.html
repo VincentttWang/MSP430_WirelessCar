@@ -1838,20 +1838,26 @@
 
     .panel-imu .metric-grid {
       gap: 8px !important;
+      grid-template-rows: 1fr 1fr !important;
     }
 
     .panel-imu .metric-card {
       padding: 8px 12px !important;
       gap: 3px !important;
       border-radius: 10px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
     }
 
     .panel-imu .metric-label {
       font-size: 11px !important;
+      white-space: nowrap !important;
     }
 
     .panel-imu .metric-value {
       font-size: 19px !important;
+      white-space: nowrap !important;
     }
 
     .panel-log {
@@ -2476,11 +2482,11 @@
 
           <div class="metric-card" style="cursor: pointer;" onclick="toggleRunStop()" title="点击可快速切换 启动/急停">
             <div class="metric-label">
-              <span>运行工况状态 (点击切换)</span>
+              <span>运行工况状态</span>
               <span>STATE</span>
             </div>
-            <div class="metric-value" style="font-size: 16px;" id="valState">
-              <span style="color: var(--accent-red); font-weight: 800;">⏹ STOP (停止)</span>
+            <div class="metric-value" style="font-size: 19px;" id="valState">
+              <span style="color: var(--accent-red); font-weight: 800;">⏹ STOP</span>
             </div>
           </div>
         </div>
@@ -3770,7 +3776,7 @@
 
         if (stEl) {
 
-          stEl.innerHTML = '<span style="color: var(--primary); font-weight: 800;">🚗 TRACK (循线)</span>';
+          stEl.innerHTML = '<span style="color: var(--primary); font-weight: 800;">🚗 TRACK</span>';
 
         }
 
@@ -3784,7 +3790,7 @@
 
         if (stEl) {
 
-          stEl.innerHTML = '<span style="color: var(--accent-green); font-weight: 800;">▶ RUN (就绪)</span>';
+          stEl.innerHTML = '<span style="color: var(--accent-green); font-weight: 800;">▶ RUN</span>';
 
         }
 
@@ -3798,7 +3804,7 @@
 
         if (stEl) {
 
-          stEl.innerHTML = '<span style="color: var(--accent-red); font-weight: 800;">⏹ STOP (停止)</span>';
+          stEl.innerHTML = '<span style="color: var(--accent-red); font-weight: 800;">⏹ STOP</span>';
 
         }
 
