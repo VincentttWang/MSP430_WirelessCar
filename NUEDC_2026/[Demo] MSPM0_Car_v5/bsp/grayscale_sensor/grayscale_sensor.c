@@ -18,12 +18,18 @@ static uint8_t s_gw_cached_raw = 0x00U;
  * @param val 输出数值指针
  * @return true 成功，false 失败/超时
  */
-static bool Gw_I2C_ReadByte(uint8_t reg, uint8_t *val)
+/* 校准缓冲区与基准阈值记录（感为默认或已标定值） */
+static uint8_t s_calib_white[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {200, 200, 200, 200, 200, 200, 200, 200};
+static uint8_t s_calib_black[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {50, 50, 50, 50, 50, 50, 50, 50};
+static uint8_t s_calib_th_w[GRAYSCALE_SENSOR_CHANNEL_COUNT]  = {150, 150, 150, 150, 150, 150, 150, 150};
+static uint8_t s_calib_th_b[GRAYSCALE_SENSOR_CHANNEL_COUNT]  = {100, 100, 100, 100, 100, 100, 100, 100};
+
+static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
 {
     uint32_t guard;
     uint32_t status;
 
-    if (val == NULL) {
+    if (val == NULL || len == 0U) {
         return false;
     }
 
@@ -70,9 +76,9 @@ static bool Gw_I2C_ReadByte(uint8_t reg, uint8_t *val)
         return false;
     }
 
-    /* 6) RX 阶段：重复起始读 1 字节数据，使能 STOP */
+    /* 6) RX 阶段：重复起始读 len 字节数据，使能 STOP */
     DL_I2C_startControllerTransferAdvanced(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
-        DL_I2C_CONTROLLER_DIRECTION_RX, 1U,
+        DL_I2C_CONTROLLER_DIRECTION_RX, (uint32_t)len,
         DL_I2C_CONTROLLER_START_ENABLE,
         DL_I2C_CONTROLLER_STOP_ENABLE,
         DL_I2C_CONTROLLER_ACK_ENABLE);
@@ -84,7 +90,69 @@ static bool Gw_I2C_ReadByte(uint8_t reg, uint8_t *val)
         if (--guard == 0U) { break; }
     }
 
-    /* 8) 等待接收完成 */
+    /* 8) 循环从 RX FIFO 取出数据 */
+    for (uint8_t i = 0U; i < len; i++) {
+        guard = GW_I2C_GUARD_XFER;
+        while (DL_I2C_isControllerRXFIFOEmpty(Gray_JY61P_I2C_INST)) {
+            if (--guard == 0U) {
+                DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+                return false;
+            }
+        }
+        val[i] = DL_I2C_receiveControllerData(Gray_JY61P_I2C_INST);
+    }
+
+    /* 9) 等待控制器完成并释放总线 */
+    guard = GW_I2C_GUARD_XFER;
+    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
+            DL_I2C_CONTROLLER_STATUS_BUSY) != 0U) {
+        if (--guard == 0U) {
+            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool Gw_I2C_ReadByte(uint8_t reg, uint8_t *val)
+{
+    return Gw_I2C_ReadBytes(reg, val, 1U);
+}
+
+static bool Gw_I2C_WriteBytes(uint8_t reg, const uint8_t *data, uint8_t len)
+{
+    uint32_t guard;
+    uint32_t status;
+
+    if (data == NULL || len == 0U) {
+        return false;
+    }
+
+    guard = GW_I2C_GUARD_IDLE;
+    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
+            DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
+        if (--guard == 0U) return false;
+    }
+    DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+    DL_I2C_flushControllerTXFIFO(Gray_JY61P_I2C_INST);
+    DL_I2C_flushControllerRXFIFO(Gray_JY61P_I2C_INST);
+
+    DL_I2C_transmitControllerData(Gray_JY61P_I2C_INST, reg);
+    for (uint8_t i = 0U; i < len; i++) {
+        DL_I2C_transmitControllerData(Gray_JY61P_I2C_INST, data[i]);
+    }
+
+    DL_I2C_startControllerTransferAdvanced(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+        DL_I2C_CONTROLLER_DIRECTION_TX, (uint32_t)(1U + len),
+        DL_I2C_CONTROLLER_START_ENABLE,
+        DL_I2C_CONTROLLER_STOP_ENABLE,
+        DL_I2C_CONTROLLER_ACK_DISABLE);
+
+    guard = 200U;
+    while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
+            DL_I2C_CONTROLLER_STATUS_BUSY) == 0U) {
+        if (--guard == 0U) break;
+    }
     guard = GW_I2C_GUARD_XFER;
     while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
             DL_I2C_CONTROLLER_STATUS_BUSY) != 0U) {
@@ -97,17 +165,6 @@ static bool Gw_I2C_ReadByte(uint8_t reg, uint8_t *val)
         DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
         return false;
     }
-
-    /* 9) 从 RX FIFO 取出数据 */
-    guard = 2000U;
-    while (DL_I2C_isControllerRXFIFOEmpty(Gray_JY61P_I2C_INST)) {
-        if (--guard == 0U) {
-            DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
-            return false;
-        }
-    }
-
-    *val = DL_I2C_receiveControllerData(Gray_JY61P_I2C_INST);
     return true;
 }
 
@@ -227,4 +284,120 @@ uint8_t GrayscaleSensor_ReadMask(void)
         }
     }
     return mask;
+}
+
+bool GrayscaleSensor_ReadAnalog(uint8_t analog_array[GRAYSCALE_SENSOR_CHANNEL_COUNT])
+{
+    if (analog_array == NULL || !s_gw_i2c_online) {
+        return false;
+    }
+    return Gw_I2C_ReadBytes(GW_GRAY_REG_ANALOG_BASE, analog_array, GRAYSCALE_SENSOR_CHANNEL_COUNT);
+}
+
+bool GrayscaleSensor_CalibrateSampleWhite(uint8_t out_white[GRAYSCALE_SENSOR_CHANNEL_COUNT])
+{
+    if (!s_gw_i2c_online) {
+        return false;
+    }
+
+    uint32_t sum[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {0};
+    uint8_t raw[GRAYSCALE_SENSOR_CHANNEL_COUNT];
+    const uint8_t SAMPLES = 8U;
+
+    for (uint8_t s = 0U; s < SAMPLES; s++) {
+        if (!GrayscaleSensor_ReadAnalog(raw)) {
+            return false;
+        }
+        for (uint8_t i = 0U; i < GRAYSCALE_SENSOR_CHANNEL_COUNT; i++) {
+            sum[i] += raw[i];
+        }
+        for (volatile uint32_t d = 0U; d < 8000U; d++) { __NOP(); }
+    }
+
+    for (uint8_t i = 0U; i < GRAYSCALE_SENSOR_CHANNEL_COUNT; i++) {
+        s_calib_white[i] = (uint8_t)(sum[i] / SAMPLES);
+        if (out_white != NULL) {
+            out_white[i] = s_calib_white[i];
+        }
+    }
+    return true;
+}
+
+bool GrayscaleSensor_CalibrateSampleBlack(uint8_t out_black[GRAYSCALE_SENSOR_CHANNEL_COUNT])
+{
+    if (!s_gw_i2c_online) {
+        return false;
+    }
+
+    uint32_t sum[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {0};
+    uint8_t raw[GRAYSCALE_SENSOR_CHANNEL_COUNT];
+    const uint8_t SAMPLES = 8U;
+
+    for (uint8_t s = 0U; s < SAMPLES; s++) {
+        if (!GrayscaleSensor_ReadAnalog(raw)) {
+            return false;
+        }
+        for (uint8_t i = 0U; i < GRAYSCALE_SENSOR_CHANNEL_COUNT; i++) {
+            sum[i] += raw[i];
+        }
+        for (volatile uint32_t d = 0U; d < 8000U; d++) { __NOP(); }
+    }
+
+    for (uint8_t i = 0U; i < GRAYSCALE_SENSOR_CHANNEL_COUNT; i++) {
+        s_calib_black[i] = (uint8_t)(sum[i] / SAMPLES);
+        if (out_black != NULL) {
+            out_black[i] = s_calib_black[i];
+        }
+    }
+    return true;
+}
+
+bool GrayscaleSensor_ApplyCalibration(uint8_t out_th_w[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                      uint8_t out_th_b[GRAYSCALE_SENSOR_CHANNEL_COUNT])
+{
+    if (!s_gw_i2c_online) {
+        return false;
+    }
+
+    for (uint8_t i = 0U; i < GRAYSCALE_SENSOR_CHANNEL_COUNT; i++) {
+        uint16_t w = s_calib_white[i];
+        uint16_t b = s_calib_black[i];
+
+        if (w == b) {
+            if (w >= 128U) { b = (uint16_t)(w - 50U); }
+            else           { w = (uint16_t)(b + 50U); }
+        }
+        if (b > w) {
+            uint16_t temp = w; w = b; b = temp;
+        }
+
+        /* 感为官方 Keil 例程滞回阈值公式: (No_Mcu_Ganv_Grayscale_Sensor.c L126-127)
+         * Gray_white = (white * 2 + black) / 3;
+         * Gray_black = (white + black * 2) / 3;
+         */
+        s_calib_th_w[i] = (uint8_t)((w * 2U + b) / 3U);
+        s_calib_th_b[i] = (uint8_t)((w + b * 2U) / 3U);
+
+        if (out_th_w != NULL) { out_th_w[i] = s_calib_th_w[i]; }
+        if (out_th_b != NULL) { out_th_b[i] = s_calib_th_b[i]; }
+    }
+
+    /* 下发给感为八路灰度硬件寄存器 */
+    bool ok_w = Gw_I2C_WriteBytes(GW_GRAY_REG_CALIB_WHITE, s_calib_th_w, GRAYSCALE_SENSOR_CHANNEL_COUNT);
+    bool ok_b = Gw_I2C_WriteBytes(GW_GRAY_REG_CALIB_BLACK, s_calib_th_b, GRAYSCALE_SENSOR_CHANNEL_COUNT);
+
+    return (ok_w && ok_b);
+}
+
+void GrayscaleSensor_GetCalibrationData(uint8_t white[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                       uint8_t black[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                       uint8_t th_white[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                       uint8_t th_black[GRAYSCALE_SENSOR_CHANNEL_COUNT])
+{
+    for (uint8_t i = 0U; i < GRAYSCALE_SENSOR_CHANNEL_COUNT; i++) {
+        if (white != NULL)    white[i]    = s_calib_white[i];
+        if (black != NULL)    black[i]    = s_calib_black[i];
+        if (th_white != NULL) th_white[i] = s_calib_th_w[i];
+        if (th_black != NULL) th_black[i] = s_calib_th_b[i];
+    }
 }

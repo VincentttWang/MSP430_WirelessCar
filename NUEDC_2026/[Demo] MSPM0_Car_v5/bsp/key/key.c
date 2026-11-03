@@ -45,6 +45,11 @@ static const KEY_HW_CONFIG s_key_hw[KEY_ID_MAX] = {
         .pin = KEY1_PIN,
         .active_low = (KEY1_ACTIVE_LOW != 0U),
     },
+    [KEY_ID_DOWN] = {
+        .port = KEY_DOWN_PORT,
+        .pin = KEY_DOWN_PIN,
+        .active_low = (KEY_DOWN_ACTIVE_LOW != 0U),
+    },
 };
 
 static KEY_STATE_CONTEXT s_key_state[KEY_ID_MAX];

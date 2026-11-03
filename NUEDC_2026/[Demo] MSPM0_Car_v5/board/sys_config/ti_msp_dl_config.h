@@ -250,6 +250,14 @@ extern "C" {
 /* Defines for PIN_1: GPIOB.21 with pinCMx 49 on package pin 20 */
 #define Key_PIN_1_PIN                                           (DL_GPIO_PIN_21)
 #define Key_PIN_1_IOMUX                                          (IOMUX_PINCM49)
+/* Defines for PIN_DOWN: GPIOB.25 with pinCMx 56 on package pin 24 */
+#define Key_PIN_DOWN_PORT                                                (GPIOB)
+#define Key_PIN_DOWN_PIN                                        (DL_GPIO_PIN_25)
+#define Key_PIN_DOWN_IOMUX                                       (IOMUX_PINCM56)
+/* Defines for Buzzer: GPIOB.5 with pinCMx 18 on package pin 57 */
+#define Buzzer_PORT                                                      (GPIOB)
+#define Buzzer_PIN                                               (DL_GPIO_PIN_5)
+#define Buzzer_IOMUX                                             (IOMUX_PINCM18)
 /* Port definition for Pin Group SMotor_IO */
 #define SMotor_IO_PORT                                                   (GPIOB)
 

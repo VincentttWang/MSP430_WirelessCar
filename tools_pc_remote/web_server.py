@@ -74,8 +74,19 @@ def rx_thread_worker():
                     data = g_serial.read(n)
                     buf.extend(data)
 
-                    while len(buf) >= 20:
-                        if buf[0] == 0xAA and buf[1] == 0x55:
+                    while len(buf) >= 2:
+                        if buf[0] == 0x21:  # '!'
+                            end_idx = buf.find(b'#')
+                            if end_idx != -1:
+                                msg = bytes(buf[:end_idx+1]).decode('ascii', errors='ignore')
+                                g_telemetry["calib_msg"] = msg
+                                buf = buf[end_idx+1:]
+                                continue
+                            else:
+                                if len(buf) > 128:
+                                    buf.pop(0)
+                                break
+                        elif len(buf) >= 20 and buf[0] == 0xAA and buf[1] == 0x55:
                             if buf[18] == 0x55 and buf[19] == 0xAA:
                                 chk = sum(buf[2:17]) & 0xFF
                                 if chk == buf[17]:
@@ -98,17 +109,27 @@ def rx_thread_worker():
                                         "state": car_state,
                                         "light": light_state,
                                         "car_link": link_online,
-                                        "last_update": time.time()
+                                        "last_update": time.time(),
+                                        "calib_msg": g_telemetry.get("calib_msg", "")
                                     }
                                     g_frame_count += 1
                                     buf = buf[20:]
                                     continue
                             buf = buf[1:]
                         else:
-                            idx = buf.find(0xAA)
-                            if idx > 0:
-                                buf = buf[idx:]
-                            elif idx == -1:
+                            idx_aa = buf.find(0xAA)
+                            idx_bang = buf.find(0x21)
+                            nxt = -1
+                            if idx_aa != -1 and idx_bang != -1:
+                                nxt = min(idx_aa, idx_bang)
+                            elif idx_aa != -1:
+                                nxt = idx_aa
+                            elif idx_bang != -1:
+                                nxt = idx_bang
+
+                            if nxt > 0:
+                                buf = buf[nxt:]
+                            elif nxt == -1:
                                 buf.clear()
                             else:
                                 break

@@ -26,6 +26,10 @@ extern "C" {
 #define GW_GRAY_REG_DIGITAL      0xDDU
 #define GW_GRAY_REG_PING         0xAAU
 #define GW_GRAY_PING_RESPONSE    0x66U
+#define GW_GRAY_REG_ANALOG_BASE  0xB0U
+#define GW_GRAY_REG_CALIB_BLACK  0xD0U
+#define GW_GRAY_REG_CALIB_WHITE  0xD1U
+#define GW_GRAY_REG_NORMALIZE    0xCFU
 
 #ifndef GRAYSCALE_SENSOR_1_PORT
 #define GRAYSCALE_SENSOR_1_PORT Tracking_Tracking_1_PORT
@@ -123,6 +127,44 @@ uint8_t GrayscaleSensor_ReadMask(void);
 uint8_t GrayscaleSensor_ReadSingle(GRAYSCALE_SENSOR_CHANNEL channel);
 
 #define TrackingSensor_Read(digital_array) GrayscaleSensor_Read(digital_array)
+
+/**
+ * @brief 读取 8 路灰度传感器模拟量（0~255）。
+ * @param analog_array 长度至少为 8 的输出数组。
+ * @return true 成功读取，false 失败
+ */
+bool GrayscaleSensor_ReadAnalog(uint8_t analog_array[GRAYSCALE_SENSOR_CHANNEL_COUNT]);
+
+/**
+ * @brief 采集白底基准数据并存入内部校准缓冲区。
+ * @param out_white 可选输出数组（可传 NULL），输出 8 路采集均值。
+ * @return true 成功，false 失败
+ */
+bool GrayscaleSensor_CalibrateSampleWhite(uint8_t out_white[GRAYSCALE_SENSOR_CHANNEL_COUNT]);
+
+/**
+ * @brief 采集黑线基准数据并存入内部校准缓冲区。
+ * @param out_black 可选输出数组（可传 NULL），输出 8 路采集均值。
+ * @return true 成功，false 失败
+ */
+bool GrayscaleSensor_CalibrateSampleBlack(uint8_t out_black[GRAYSCALE_SENSOR_CHANNEL_COUNT]);
+
+/**
+ * @brief 根据已采样的白底和黑线数据，按感为官方例程算法计算滞回比较阈值并写入传感器寄存器。
+ * @param out_th_w 可选输出白阈值数组（可传 NULL）
+ * @param out_th_b 可选输出黑阈值数组（可传 NULL）
+ * @return true 校准并写入成功，false 失败
+ */
+bool GrayscaleSensor_ApplyCalibration(uint8_t out_th_w[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                      uint8_t out_th_b[GRAYSCALE_SENSOR_CHANNEL_COUNT]);
+
+/**
+ * @brief 获取最近一次校准所记录的白底、黑线与阈值数据。
+ */
+void GrayscaleSensor_GetCalibrationData(uint8_t white[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                       uint8_t black[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                       uint8_t th_white[GRAYSCALE_SENSOR_CHANNEL_COUNT],
+                                       uint8_t th_black[GRAYSCALE_SENSOR_CHANNEL_COUNT]);
 
 #ifdef __cplusplus
 }

@@ -25,6 +25,18 @@ extern "C" {
 #define KEY1_ACTIVE_LOW 1U
 #endif
 
+#ifndef KEY_DOWN_PORT
+#define KEY_DOWN_PORT Key_PIN_DOWN_PORT
+#endif
+
+#ifndef KEY_DOWN_PIN
+#define KEY_DOWN_PIN Key_PIN_DOWN_PIN
+#endif
+
+#ifndef KEY_DOWN_ACTIVE_LOW
+#define KEY_DOWN_ACTIVE_LOW 1U
+#endif
+
 #ifndef KEY_DEBOUNCE_MS
 #define KEY_DEBOUNCE_MS 20U
 #endif
@@ -46,6 +58,7 @@ extern "C" {
  */
 typedef enum {
     KEY_ID_1 = 0,
+    KEY_ID_DOWN,
     KEY_ID_MAX
 } KEY_ID;
 
@@ -116,6 +129,11 @@ void Key_ClearAllEvents(void);
 #define Key_short_press()  Key_IsShortPress(KEY_ID_1)
 #define Key_long_press()   Key_IsLongPress(KEY_ID_1)
 #define Key_double_click() Key_IsDoubleClick(KEY_ID_1)
+
+#define Key_Down_IsPressed()      Key_IsPressed(KEY_ID_DOWN)
+#define Key_Down_IsShortPress()   Key_IsShortPress(KEY_ID_DOWN)
+#define Key_Down_IsShortRelease() Key_IsShortRelease(KEY_ID_DOWN)
+#define Key_Down_IsLongPress()    Key_IsLongPress(KEY_ID_DOWN)
 
 #ifdef __cplusplus
 }
