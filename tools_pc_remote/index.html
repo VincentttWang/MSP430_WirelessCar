@@ -1799,23 +1799,24 @@
       margin: 0 auto !important;
     }
 
-    /* ── 左列：姿态罗盘 (占大比重纵向展开) + 通信日志 (紧凑精简) ── */
+    /* ── 左列：惯导姿态与通信日志（按约 2:1 比例纵向分布） ── */
     .col-left {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      height: 100%;
-      min-height: 0;
-      overflow: hidden;
+      display: grid !important;
+      grid-template-rows: 2fr 1fr !important;
+      gap: 10px !important;
+      height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
     }
 
     .panel-imu {
-      flex: 1 1 auto !important;
       padding: 12px 16px !important;
       gap: 8px !important;
       display: flex !important;
       flex-direction: column !important;
-      justify-content: flex-start !important;
+      justify-content: space-between !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
     }
 
     .panel-imu .panel-header {
@@ -1829,6 +1830,7 @@
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
+      min-height: 0 !important;
     }
 
     .panel-imu .compass-dial {
@@ -1861,8 +1863,6 @@
     }
 
     .panel-log {
-      flex: 0 0 145px !important;
-      max-height: 145px !important;
       min-height: 0 !important;
       display: flex !important;
       flex-direction: column !important;
