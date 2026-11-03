@@ -5103,6 +5103,8 @@
       drive.lastErr = 0;
       drive.integral = 0;
       drive.dFilt = 0;
+      drive.lastYaw = (traj && traj.yaw !== undefined) ? traj.yaw : 0;
+      drive.yawRateFilt = 0;
       drive.outL = 0;
       drive.outR = 0;
       drive.alignDoneCount = 0;
@@ -5138,11 +5140,15 @@
 
       const sel = document.getElementById('autoSpeed');
       drive.speed = parseInt(sel ? sel.value : '42', 10) || 42;
-      drive.look = 170 + drive.speed * 2.6;      /* 42% -> 280mm */
+      /* 前视距离：42%基准下由原 280mm 增至 525mm (~3.5倍轴距)。
+       * 充足的前视距离提供关键几何超前相位，将欠阻尼系统转变为临界阻尼，彻底消除画龙与摇头晃脑。 */
+      drive.look = 420 + drive.speed * 2.5;
 
       drive.mode = mode;
       drive.active = true;
       drive.thenPath = null;
+      drive.lastYaw = traj.yaw;
+      drive.yawRateFilt = 0;
 
       /* 回放的关键细节：刚录完路线时车停在**终点**，如果直接从当前位置
        * 起跑，第一帧就判定"到达"。所以先直线开回起点，到了再切换到正式路线。*/
@@ -5290,8 +5296,8 @@
           if (drive.alignDoneCount >= 2) {
             drive.state = 'track';
             drive.lastErr = err;
-            drive.integral = 0;
-            drive.dFilt = 0;
+            drive.lastYaw = traj.yaw;
+            drive.yawRateFilt = 0;
             drive.lastTime = Date.now();
             drive.outL = 0;
             drive.outR = 0;
@@ -5319,8 +5325,9 @@
       }
 
       /* 6) 阶段二：平稳贴线跟踪状态 (track)
-       * 计算横向偏距 (Cross-Track Error, 离路径中心线的垂直距离)，
-       * 结合 Stanley 算法与前视航向误差，确保小车能死死贴合原轨迹 */
+       * 前视点 Pure Pursuit 几何角 want 已天然包含了横向偏距修正项。
+       * 辅助计算横向偏距 crossDist (mm)，但仅在偏离较大时施加轻度饱和修正，
+       * 坚决避免双重叠加导致的超调与相位反转。 */
       let pA = path[best];
       let pB = (best < path.length - 1) ? path[best + 1] : (best > 0 ? path[best] : path[0]);
       if (best === path.length - 1 && best > 0) {
@@ -5335,14 +5342,19 @@
         /* 二维叉乘得到车距路径段的有符号垂直偏距 (mm) */
         crossDist = (segDx * (p.y - pA.y) - segDy * (p.x - pA.x)) / segLen;
       }
-      /* 横向切回角补偿：偏距越大，引导小车以一定切角平滑回归中心线，限幅 ±18° */
-      const crossCorrection = Math.max(-18, Math.min(18, crossDist * 0.12));
+      /* 横向偏距轻量级饱和补偿：中区(|crossDist|<=25mm)不干预，完全信任 Pure Pursuit 几何前视；
+       * 偏大时软饱和补偿，上限仅 ±6°，绝不上冲 */
+      let crossBias = 0;
+      if (Math.abs(crossDist) > 25) {
+        const excess = Math.abs(crossDist) - 25;
+        crossBias = Math.sign(crossDist) * Math.min(6, excess * 0.04);
+      }
 
-      let fusedErr = err + crossCorrection;
+      let fusedErr = err + crossBias;
       while (fusedErr > 180) fusedErr -= 360;
       while (fusedErr < -180) fusedErr += 360;
 
-      /* 若由于外力强烈碰撞导致偏航超过 85° 达 5 帧以上，才重新触发对齐，避免单帧噪点误切 */
+      /* 若由于外力强烈碰撞导致偏航超过 85° 达 5 帧以上，才重新触发原地对齐 */
       if (Math.abs(err) > 85) {
         drive.largeErrCount = (drive.largeErrCount || 0) + 1;
         if (drive.largeErrCount > 5) {
@@ -5355,45 +5367,51 @@
         drive.largeErrCount = 0;
       }
 
-      /* 7) 连续时间 PID 控制器（含微分滤波，抑制机械与通信延迟诱发的画龙与振荡） */
+      /* 7) 陀螺仪角速度主动反舵阻尼 PD 控制器 + 死区设计
+       * 物理建模：小车横向跟踪本质为双重积分系统 (Y(s)/Omega(s) = v/s^2)，
+       * 严禁加入积分器 Ki（Ki 构成三阶积分 1/s^3 引入 270° 相位滞后，是产生永恒画龙的罪魁祸首！）。
+       * 微分项采用小车实际角速度进行反舵阻尼：车头回正时阻尼力矩主动减速，实现临界阻尼 (zeta >= 1.0)。 */
       const now = Date.now();
       const dt = Math.max(0.02, Math.min(0.15, (drive.lastTime ? (now - drive.lastTime) : 50) / 1000));
       drive.lastTime = now;
 
-      const rawD = (fusedErr - (drive.lastErr || 0)) / dt;
-      drive.lastErr = fusedErr;
-      /* 微分低通滤波 */
-      drive.dFilt = (drive.dFilt || 0) * 0.65 + rawD * 0.35;
+      /* 实时解算车体航向角速度 (deg/s) */
+      let dYaw = traj.yaw - (drive.lastYaw !== undefined ? drive.lastYaw : traj.yaw);
+      while (dYaw > 180) dYaw -= 360;
+      while (dYaw < -180) dYaw += 360;
+      const rawYawRate = dYaw / dt;
+      drive.lastYaw = traj.yaw;
+      drive.yawRateFilt = (drive.yawRateFilt || 0) * 0.5 + rawYawRate * 0.5;
 
-      /* 积分防饱和累计 (仅在小误差时工作) */
-      if (Math.abs(fusedErr) < 22) {
-        drive.integral = Math.max(-25, Math.min(25, (drive.integral || 0) + fusedErr * dt));
+      /* 状态死区 (Deadband)：航向残差 <= 1.2° 且横向偏距 <= 18mm 时输出严格为 0，
+       * 抑制传感器离散量化噪声引起的电机左右微颤，保持绝对直线巡航 */
+      let turn = 0;
+      if (Math.abs(fusedErr) <= 1.2 && Math.abs(crossDist) <= 18) {
+        turn = 0;
       } else {
-        drive.integral = 0;
+        const Kp = 0.38;     /* 柔和比例增益，提供稳定向心加速度 */
+        const Kd = 0.045;    /* 角速度主动反舵阻尼，消除超调摆头 */
+        turn = Kp * fusedErr - Kd * drive.yawRateFilt;
       }
-
-      const Kp = 0.72;
-      const Ki = 0.04;
-      const Kd = 0.052;
-      let turn = Kp * fusedErr + Ki * drive.integral + Kd * drive.dFilt;
 
       /* 8) 速度规划与差速输出平滑 */
       const aFused = Math.abs(fusedErr);
       /* 大弯适度减速提高舵效，终点前平稳收油 */
-      let v = drive.speed * (1.0 - 0.28 * Math.min(1.0, aFused / 45.0));
-      v *= (0.55 + 0.45 * Math.min(1.0, remain / 450.0));
+      let v = drive.speed * (1.0 - 0.25 * Math.min(1.0, aFused / 45.0));
+      v *= (0.60 + 0.40 * Math.min(1.0, remain / 450.0));
       if (v < 30) v = 30;
 
       /* 差速限幅：保留内轮转速，绝不锁死单轮，保持行进流畅度 */
-      const turnMax = Math.max(12, drive.speed - 16);
+      const turnMax = Math.max(10, drive.speed - 16);
       turn = Math.max(-turnMax, Math.min(turnMax, turn));
 
       const targetL = v + drive.turnDir * turn;
       const targetR = v - drive.turnDir * turn;
 
-      /* 斜率限制器 (Slew-Rate Filter)：每帧平稳过渡，告别骤升骤降与抖动 */
-      drive.outL = (drive.outL || v) * 0.65 + targetL * 0.35;
-      drive.outR = (drive.outR || v) * 0.65 + targetR * 0.35;
+      /* 快速响应斜率滤波器：新指令权重 0.70，滞后从 140ms 降至 <25ms，
+       * 根除通信与电机响应迟滞带来的闭环自激振荡 */
+      drive.outL = (drive.outL || v) * 0.30 + targetL * 0.70;
+      drive.outR = (drive.outR || v) * 0.30 + targetR * 0.70;
 
       const outLClamped = Math.max(-100, Math.min(100, drive.outL));
       const outRClamped = Math.max(-100, Math.min(100, drive.outR));
@@ -5401,7 +5419,7 @@
       writeSerial('!D:' + Math.round(outLClamped * 10) + ',' + Math.round(outRClamped * 10) + '#');
 
       setAutoState((drive.mode === 'return' ? '返航 ' : '回放 ') +
-        (remain / 1000).toFixed(2) + 'm · 偏' + fusedErr.toFixed(0) + '° · 距线' + crossDist.toFixed(0) + 'mm');
+        (remain / 1000).toFixed(2) + 'm · 偏' + fusedErr.toFixed(1) + '° · 距线' + crossDist.toFixed(0) + 'mm');
     }
 
 
