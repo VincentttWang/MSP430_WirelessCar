@@ -1811,15 +1811,24 @@
 
     .panel-imu {
       flex: 1 1 auto !important;
-      padding: 14px 16px !important;
-      gap: 10px !important;
+      padding: 12px 16px !important;
+      gap: 8px !important;
       display: flex !important;
       flex-direction: column !important;
-      justify-content: space-around !important;
+      justify-content: flex-start !important;
+    }
+
+    .panel-imu .panel-header {
+      padding-bottom: 6px !important;
+      margin-bottom: 2px !important;
     }
 
     .panel-imu .compass-box {
-      padding: 6px 0 !important;
+      padding: 0 !important;
+      flex: 1 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
     }
 
     .panel-imu .compass-dial {
@@ -1931,10 +1940,22 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
-      padding: 10px 14px !important;
+      padding: 12px 14px 10px 14px !important;
       gap: 6px !important;
       position: relative;
       overflow: hidden;
+    }
+
+    .panel-traj .panel-header {
+      padding-bottom: 6px !important;
+      margin-bottom: 2px !important;
+      flex-wrap: nowrap !important;
+      gap: 8px !important;
+    }
+
+    .panel-traj .panel-title {
+      white-space: nowrap !important;
+      flex-shrink: 0 !important;
     }
 
     .panel-traj .map-wrap {
@@ -1947,9 +1968,19 @@
     }
 
     .map-tools {
-      display: flex;
-      align-items: center;
-      gap: 5px;
+      display: flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+      flex-wrap: nowrap !important;
+      margin-left: auto !important;
+    }
+
+    .map-tools .btn-preset {
+      flex: 0 0 auto !important;
+      padding: 3px 6px !important;
+      font-size: 11px !important;
+      white-space: nowrap !important;
+      letter-spacing: 0 !important;
     }
 
     .map-stats-compact {
@@ -2387,7 +2418,6 @@
       <div class="panel panel-imu">
         <div class="panel-header">
           <div class="panel-title">惯导姿态与罗盘仪</div>
-          <span style="font-size: 11px; color: var(--text-muted);">JY61P (I2C0)</span>
         </div>
 
         <!-- 360° 罗盘仪 -->
@@ -2480,7 +2510,6 @@
       <div class="panel panel-ctrl">
         <div class="panel-header">
           <div class="panel-title">小车运动遥控台</div>
-          <span style="font-size: 11px; color: var(--text-muted);">全向 WASD 键位响应</span>
         </div>
 
         <!-- 操纵按键十字区域 -->
@@ -2580,12 +2609,12 @@
           <div class="map-tools">
             <button class="btn-preset btn-ai" onclick="routeSave()" title="记忆当前行驶的轨迹点集">💾 记忆路线</button>
             <button class="btn-preset btn-ai" onclick="autoReturn()" title="沿当前记忆路线原路自主反向返航">↩️ 原路返回</button>
-            <button class="btn-preset btn-ai" onclick="autoReplay()" title="自动循迹重新正向行驶">🔁 原路回放</button>
             <button id="trajAuto" class="btn-preset on" onclick="trajToggleAuto()">自适应</button>
             <button class="btn-preset" onclick="trajReset(true)">清空</button>
             <div class="dropdown-wrap" id="trajDropWrap">
               <button class="btn-preset" onclick="toggleTrajDropdown(event)">操作 ▾</button>
               <div id="trajDropMenu" class="dropdown-menu">
+                <div class="dropdown-item" onclick="autoReplay()">🔁 自动原路回放</div>
                 <div class="dropdown-item" onclick="trajExportCsv()">📊 导出 CSV 轨迹数据</div>
                 <div class="dropdown-item" onclick="trajExportPng()">🖼️ 导出 PNG 轨迹截图</div>
                 <div class="dropdown-divider"></div>
