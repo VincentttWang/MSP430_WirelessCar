@@ -112,22 +112,14 @@ static void AppRemoteCar_SendCalibProbes(void)
     char resp[128];
     uint8_t mask = GrayscaleSensor_ReadMask();
     bool i2c_on = GrayscaleSensor_IsI2cOnline();
-    uint8_t a[GRAYSCALE_SENSOR_CHANNEL_COUNT];
+    uint8_t i2c_addr = GrayscaleSensor_GetI2cAddr();
+    uint8_t a[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {0};
 
     if (i2c_on && GrayscaleSensor_ReadAnalog(a)) {
-        snprintf(resp, sizeof(resp), "!CAL:PROBES,%02X,1,%u,%u,%u,%u,%u,%u,%u,%u#",
-                 mask, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+        snprintf(resp, sizeof(resp), "!CAL:PROBES,%02X,1,%02X,%u,%u,%u,%u,%u,%u,%u,%u#",
+                 mask, i2c_addr, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
     } else {
-        snprintf(resp, sizeof(resp), "!CAL:PROBES,%02X,0,%u,%u,%u,%u,%u,%u,%u,%u#",
-                 mask,
-                 ((mask >> 0) & 1U) ? 255U : 0U,
-                 ((mask >> 1) & 1U) ? 255U : 0U,
-                 ((mask >> 2) & 1U) ? 255U : 0U,
-                 ((mask >> 3) & 1U) ? 255U : 0U,
-                 ((mask >> 4) & 1U) ? 255U : 0U,
-                 ((mask >> 5) & 1U) ? 255U : 0U,
-                 ((mask >> 6) & 1U) ? 255U : 0U,
-                 ((mask >> 7) & 1U) ? 255U : 0U);
+        snprintf(resp, sizeof(resp), "!CAL:PROBES,%02X,0,00,0,0,0,0,0,0,0,0#", mask);
     }
     AppRemoteCar_SendPacket(resp);
 }
@@ -1058,6 +1050,8 @@ void App_RunRemoteCarTask(void){
             AppRemoteCar_HandleDownKey();
         }
 
+        uint32_t now = BSP_Time_GetMs();
+
         /* 处于巡线校准状态时，每 100ms 自动向上位机回传 8 路探头实时状态与模拟量 */
         if (s_calib_state != CALIB_STATE_IDLE) {
             static uint32_t s_last_calib_stream_ms = 0U;
@@ -1066,8 +1060,6 @@ void App_RunRemoteCarTask(void){
                 AppRemoteCar_SendCalibProbes();
             }
         }
-
-        uint32_t now = BSP_Time_GetMs();
 
         /* ACT 为 RESET 保持一秒后自动回到 RESET 之前的动作状态 */
         if (s_reset_action_ms > 0U && (now - s_reset_action_ms) >= 1000U){

@@ -12273,20 +12273,21 @@
     function onCalibPacketReceived(text) {
       if (!text) return;
       if (text.startsWith('!CAL:PROBES,')) {
-        // 格式: !CAL:PROBES,<mask_hex>,<i2c_online>,<v0>,...,<v7>#
+        // 格式: !CAL:PROBES,<mask_hex>,<i2c_online>,<addr_hex>,<v0>,...,<v7>#
         const raw = text.replace('!CAL:PROBES,', '').replace('#', '');
         const p = raw.split(',');
-        if (p.length >= 2) {
+        if (p.length >= 3) {
           const mask = parseInt(p[0], 16) || 0;
           const i2cOnline = (p[1] === '1');
-          const vals = p.slice(2).map(Number);
+          const addrHex = p[2] || '4C';
+          const vals = p.slice(3).map(Number);
 
           const statusElem = document.getElementById('calibSensorStatus');
           if (statusElem) {
             if (i2cOnline) {
-              statusElem.innerHTML = '<span style="color: #22c55e; font-weight: 600;">● 在线 (I2C 0x4C)</span> · 模拟量+数字量就绪';
+              statusElem.innerHTML = `<span style="color: #22c55e; font-weight: 600;">● 在线 (I2C 0x${addrHex.toUpperCase()})</span> · 8路模拟量与数字量实时就绪`;
             } else {
-              statusElem.innerHTML = '<span style="color: #eab308; font-weight: 600;">● 在线 (GPIO 8路模式)</span> · I2C未响应/脱机';
+              statusElem.innerHTML = '<span style="color: #f43f5e; font-weight: 600;">● I2C离线/未应答</span> · 请检查 PA0/PA1 连线与传感器 5V 供电';
             }
           }
 

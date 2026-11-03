@@ -112,6 +112,7 @@ bool GrayscaleSensor_Probe(void);
  * @return true 在线，false 未接或通信异常
  */
 bool GrayscaleSensor_IsI2cOnline(void);
+uint8_t GrayscaleSensor_GetI2cAddr(void);
 
 /**
  * @brief 读取全部 8 路灰度传感器数字状态。

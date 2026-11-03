@@ -3,28 +3,67 @@
  * @brief BSP 8 路光敏灰度传感器实现（感为 I2C 八路灰度与 GPIO 兼容）。
  */
 #include "grayscale_sensor.h"
+#include <string.h>
 #include <stddef.h>
 
-/* 感为 I2C 在线状态与最近一帧原始数据 */
+/* 感为 I2C 在线状态、检测到的 I2C 地址与最近一帧原始数据 */
 static bool s_gw_i2c_online = false;
+static uint8_t s_gw_i2c_addr = GW_GRAY_I2C_ADDR; /* 默认 0x4C */
 static uint8_t s_gw_cached_raw = 0x00U;
 
-#define GW_I2C_GUARD_IDLE   20000U
+#define GW_I2C_GUARD_IDLE   15000U
 #define GW_I2C_GUARD_XFER   25000U
 
-/**
- * @brief 从感为 I2C 灰度模块读取 1 字节寄存器。
- * @param reg 寄存器地址
- * @param val 输出数值指针
- * @return true 成功，false 失败/超时
- */
 /* 校准缓冲区与基准阈值记录（感为默认或已标定值） */
 static uint8_t s_calib_white[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {200, 200, 200, 200, 200, 200, 200, 200};
 static uint8_t s_calib_black[GRAYSCALE_SENSOR_CHANNEL_COUNT] = {50, 50, 50, 50, 50, 50, 50, 50};
 static uint8_t s_calib_th_w[GRAYSCALE_SENSOR_CHANNEL_COUNT]  = {150, 150, 150, 150, 150, 150, 150, 150};
 static uint8_t s_calib_th_b[GRAYSCALE_SENSOR_CHANNEL_COUNT]  = {100, 100, 100, 100, 100, 100, 100, 100};
 
-static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
+/**
+ * @brief I2C0 总线死锁解脱（9 个时钟脉冲 + 停止位）
+ */
+static void Gw_I2C_BusRecover(void)
+{
+    DL_I2C_disableController(Gray_JY61P_I2C_INST);
+
+    DL_GPIO_initDigitalOutput(GPIO_Gray_JY61P_I2C_IOMUX_SCL);
+    DL_GPIO_initDigitalOutput(GPIO_Gray_JY61P_I2C_IOMUX_SDA);
+    DL_GPIO_setPins(GPIO_Gray_JY61P_I2C_SCL_PORT, GPIO_Gray_JY61P_I2C_SCL_PIN);
+    DL_GPIO_setPins(GPIO_Gray_JY61P_I2C_SDA_PORT, GPIO_Gray_JY61P_I2C_SDA_PIN);
+    DL_GPIO_enableOutput(GPIO_Gray_JY61P_I2C_SCL_PORT, GPIO_Gray_JY61P_I2C_SCL_PIN);
+    DL_GPIO_enableOutput(GPIO_Gray_JY61P_I2C_SDA_PORT, GPIO_Gray_JY61P_I2C_SDA_PIN);
+    DL_Common_delayCycles(320U);
+
+    for (uint8_t i = 0U; i < 9U; i++) {
+        DL_GPIO_clearPins(GPIO_Gray_JY61P_I2C_SCL_PORT, GPIO_Gray_JY61P_I2C_SCL_PIN);
+        DL_Common_delayCycles(320U);
+        DL_GPIO_setPins(GPIO_Gray_JY61P_I2C_SCL_PORT, GPIO_Gray_JY61P_I2C_SCL_PIN);
+        DL_Common_delayCycles(320U);
+    }
+
+    DL_GPIO_clearPins(GPIO_Gray_JY61P_I2C_SDA_PORT, GPIO_Gray_JY61P_I2C_SDA_PIN);
+    DL_Common_delayCycles(320U);
+    DL_GPIO_setPins(GPIO_Gray_JY61P_I2C_SCL_PORT, GPIO_Gray_JY61P_I2C_SCL_PIN);
+    DL_Common_delayCycles(320U);
+    DL_GPIO_setPins(GPIO_Gray_JY61P_I2C_SDA_PORT, GPIO_Gray_JY61P_I2C_SDA_PIN);
+    DL_Common_delayCycles(320U);
+
+    DL_GPIO_initPeripheralInputFunctionFeatures(GPIO_Gray_JY61P_I2C_IOMUX_SDA,
+        GPIO_Gray_JY61P_I2C_IOMUX_SDA_FUNC, DL_GPIO_INVERSION_DISABLE,
+        DL_GPIO_RESISTOR_PULL_UP, DL_GPIO_HYSTERESIS_DISABLE,
+        DL_GPIO_WAKEUP_DISABLE);
+    DL_GPIO_initPeripheralInputFunctionFeatures(GPIO_Gray_JY61P_I2C_IOMUX_SCL,
+        GPIO_Gray_JY61P_I2C_IOMUX_SCL_FUNC, DL_GPIO_INVERSION_DISABLE,
+        DL_GPIO_RESISTOR_PULL_UP, DL_GPIO_HYSTERESIS_DISABLE,
+        DL_GPIO_WAKEUP_DISABLE);
+    DL_GPIO_enableHiZ(GPIO_Gray_JY61P_I2C_IOMUX_SDA);
+    DL_GPIO_enableHiZ(GPIO_Gray_JY61P_I2C_IOMUX_SCL);
+
+    DL_I2C_enableController(Gray_JY61P_I2C_INST);
+}
+
+static bool Gw_I2C_ReadBytesEx(uint8_t addr, uint8_t reg, uint8_t *val, uint8_t len)
 {
     uint32_t guard;
     uint32_t status;
@@ -33,11 +72,17 @@ static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
         return false;
     }
 
+    /* 若总线被从机卡在 BUSY 状态，执行总线恢复 */
+    if ((DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST) & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U) {
+        Gw_I2C_BusRecover();
+    }
+
     /* 1) 等待 I2C0 控制器就绪 */
     guard = GW_I2C_GUARD_IDLE;
     while (((status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST)) &
             DL_I2C_CONTROLLER_STATUS_IDLE) == 0U) {
         if (--guard == 0U) {
+            Gw_I2C_BusRecover();
             return false;
         }
     }
@@ -58,8 +103,8 @@ static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
         }
     }
 
-    /* 3) TX 阶段：发送 1 字节寄存器地址（产生完整 START + STOP，感为从机需要 STOP 触发地址锁存） */
-    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+    /* 3) TX 阶段：发送 1 字节寄存器地址（产生完整 START + STOP，感为 STM8 固件需要 STOP 触发地址锁存） */
+    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, addr,
                                    DL_I2C_CONTROLLER_DIRECTION_TX, 1U);
 
     guard = GW_I2C_GUARD_XFER;
@@ -88,7 +133,7 @@ static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
     DL_I2C_flushControllerTXFIFO(Gray_JY61P_I2C_INST);
 
     /* 4) RX 阶段：读取 len 字节数据 */
-    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, addr,
                                    DL_I2C_CONTROLLER_DIRECTION_RX, (uint32_t)len);
 
     guard = GW_I2C_GUARD_XFER;
@@ -109,10 +154,21 @@ static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
         }
     }
 
+    status = DL_I2C_getControllerStatus(Gray_JY61P_I2C_INST);
+    if ((status & DL_I2C_CONTROLLER_STATUS_ERROR) != 0U) {
+        DL_I2C_resetControllerTransfer(Gray_JY61P_I2C_INST);
+        return false;
+    }
+
     for (uint8_t i = 0U; i < len; i++) {
         val[i] = DL_I2C_receiveControllerData(Gray_JY61P_I2C_INST);
     }
     return true;
+}
+
+static bool Gw_I2C_ReadBytes(uint8_t reg, uint8_t *val, uint8_t len)
+{
+    return Gw_I2C_ReadBytesEx(s_gw_i2c_addr, reg, val, len);
 }
 
 static bool Gw_I2C_ReadByte(uint8_t reg, uint8_t *val)
@@ -154,7 +210,7 @@ static bool Gw_I2C_WriteBytes(uint8_t reg, const uint8_t *data, uint8_t len)
         }
     }
 
-    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, GW_GRAY_I2C_ADDR,
+    DL_I2C_startControllerTransfer(Gray_JY61P_I2C_INST, s_gw_i2c_addr,
                                    DL_I2C_CONTROLLER_DIRECTION_TX, (uint32_t)(len + 1U));
 
     guard = GW_I2C_GUARD_XFER;
@@ -181,19 +237,25 @@ static bool Gw_I2C_WriteBytes(uint8_t reg, const uint8_t *data, uint8_t len)
 bool GrayscaleSensor_Probe(void)
 {
     uint8_t ping_val = 0U;
+    const uint8_t candidate_addrs[] = { GW_GRAY_I2C_ADDR, 0x4D, 0x4E, 0x4F };
+
     s_gw_i2c_online = false;
 
-    /* Ping 探查感为 I2C 从机（返回 0x66 表示正常） */
-    for (uint8_t retry = 0U; retry < 3U; retry++) {
-        if (Gw_I2C_ReadByte(GW_GRAY_REG_PING, &ping_val)) {
-            if (ping_val == GW_GRAY_PING_RESPONSE) {
-                s_gw_i2c_online = true;
-                break;
+    /* 自动轮询扫描可能配置的 AD0/AD1 地址 (0x4C ~ 0x4F) */
+    for (uint8_t a = 0U; a < sizeof(candidate_addrs); a++) {
+        uint8_t addr = candidate_addrs[a];
+        for (uint8_t retry = 0U; retry < 3U; retry++) {
+            if (Gw_I2C_ReadBytesEx(addr, GW_GRAY_REG_PING, &ping_val, 1U)) {
+                if (ping_val == GW_GRAY_PING_RESPONSE) {
+                    s_gw_i2c_addr = addr;
+                    s_gw_i2c_online = true;
+                    return true;
+                }
             }
+            for (volatile uint32_t d = 0U; d < 8000U; d++) { __NOP(); }
         }
-        for (volatile uint32_t d = 0U; d < 8000U; d++) { __NOP(); }
     }
-    return s_gw_i2c_online;
+    return false;
 }
 
 void GrayscaleSensor_Init(void)
@@ -212,6 +274,11 @@ void GrayscaleSensor_Init(void)
 bool GrayscaleSensor_IsI2cOnline(void)
 {
     return s_gw_i2c_online;
+}
+
+uint8_t GrayscaleSensor_GetI2cAddr(void)
+{
+    return s_gw_i2c_addr;
 }
 
 /* ═══════════════ GPIO 回退结构（未接 I2C 时的兼容） ═══════════════ */

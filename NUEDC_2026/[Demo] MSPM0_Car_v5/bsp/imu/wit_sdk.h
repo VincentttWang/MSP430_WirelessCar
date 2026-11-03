@@ -186,6 +186,7 @@ typedef enum {
 } JY61P_HEALTH;
 
 void JY61P_I2C_Init(void);
+void JY61P_I2C_SetSuspended(bool suspend);
 void JY61P_I2C_Poll(void);
 JY61P_HEALTH JY61P_I2C_GetHealth(void);
 uint32_t JY61P_I2C_GetSampleCount(void);
