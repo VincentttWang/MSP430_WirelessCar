@@ -3739,9 +3739,16 @@
       const ring = document.getElementById('compassRing');
 
       if (ring) {
-
-        ring.style.transform = `rotate(${d.yaw}deg)`;
-
+        /* 连续最短角位移解卷绕追踪 (Unwrapped Shortest Angular Path):
+         * 解决航向角在 +179° 与 -179° (180°边界) 跨越时，CSS transition 错误反向旋转 358° 绕回 0° 的问题，
+         * 确保罗盘仪沿最短几何路径顺滑跨越 180° */
+        if (typeof g_compassDisplayYaw === 'undefined') {
+          g_compassDisplayYaw = d.yaw;
+        } else {
+          let diff = ((d.yaw - g_compassDisplayYaw + 180) % 360 + 360) % 360 - 180;
+          g_compassDisplayYaw += diff;
+        }
+        ring.style.transform = `rotate(${g_compassDisplayYaw}deg)`;
       }
 
 
@@ -4305,6 +4312,7 @@
       traj.scale = traj.target = 0.5;
 
       traj.statT = 0;
+      if (typeof g_compassDisplayYaw !== 'undefined') g_compassDisplayYaw = undefined;
 
       const btn = document.getElementById('trajAuto');
 
