@@ -2,7 +2,13 @@
 
 ## 模块职责
 
-`bsp/key` 负责板级按键读取、消抖和事件生成。当前只实现 `KEY_ID_1`，但接口、硬件配置表和状态数组按多按键方式组织，后续可以扩展 `KEY_ID_2` 等按键。
+`bsp/key` 负责板级按键读取、消抖和事件生成。接口、硬件配置表和状态数组都按多按键方式组织，当前实现三颗：
+
+| ID | 引脚 | 用途 | 引脚初始化位置 |
+| --- | --- | --- | --- |
+| `KEY_ID_1` | PB21 | 板载用户键（菜单/确认） | SysConfig |
+| `KEY_ID_DOWN` | PB25 | 巡线校准向导 | SysConfig |
+| `KEY_ID_UP` | PA14 | OLED 页面切换（仪表盘 ⇄ 八路灰度监视） | `Key_Init()` 现场配置 |
 
 该模块属于 BSP 层，只依赖：
 
@@ -30,6 +36,27 @@
 
 如果后续改板或增加按键，可以在编译配置中覆盖这些宏，或在 `key.h` 中增加 `KEY2_PORT`、`KEY2_PIN`、`KEY2_ACTIVE_LOW`，再扩展内部 `s_key_hw[]` 配置表。
 
+### UP 键（PA14）
+
+`PA14` 没有进 SysConfig 的 Key 组，由 `Key_Init()` 现场按「上拉输入」配置：
+
+```c
+#ifndef KEY_UP_PORT
+#define KEY_UP_PORT (GPIOA)
+#endif
+#ifndef KEY_UP_PIN
+#define KEY_UP_PIN (DL_GPIO_PIN_14)
+#endif
+#ifndef KEY_UP_IOMUX
+#define KEY_UP_IOMUX (IOMUX_PINCM36)
+#endif
+#ifndef KEY_UP_ACTIVE_LOW
+#define KEY_UP_ACTIVE_LOW 1U
+#endif
+```
+
+换脚或改板时改这四个宏即可，不需要重新生成 SysConfig。
+
 ## 时间参数宏
 
 ```c
@@ -48,6 +75,8 @@
 ```c
 typedef enum {
     KEY_ID_1 = 0,
+    KEY_ID_DOWN,
+    KEY_ID_UP,
     KEY_ID_MAX
 } KEY_ID;
 ```
@@ -120,6 +149,11 @@ typedef enum {
 #define Key_short_press()  Key_IsShortPress(KEY_ID_1)
 #define Key_long_press()   Key_IsLongPress(KEY_ID_1)
 #define Key_double_click() Key_IsDoubleClick(KEY_ID_1)
+
+#define Key_Down_IsPressed()      Key_IsPressed(KEY_ID_DOWN)
+#define Key_Down_IsShortPress()   Key_IsShortPress(KEY_ID_DOWN)
+#define Key_Up_IsPressed()        Key_IsPressed(KEY_ID_UP)
+#define Key_Up_IsShortPress()     Key_IsShortPress(KEY_ID_UP)
 ```
 
 后续如果上层流程统一改用 `Key_GetEvent()`，可以再考虑移除这些兼容宏。
