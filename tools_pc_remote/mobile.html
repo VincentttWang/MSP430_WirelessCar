@@ -5,16 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#070b12">
-<title>小车手机手柄</title>
+<title>小车手机手柄 · 自动驾驶</title>
 <style>
   :root {
     --bg: #070b12;
-    --card: rgba(16, 26, 40, 0.85);
+    --card: rgba(16, 26, 40, 0.86);
     --line: rgba(255, 255, 255, 0.09);
     --cy: #00f2fe;
     --gr: #00e676;
     --rd: #ff3366;
     --am: #ffb300;
+    --vi: #b388ff;
     --mut: #8899a6;
   }
 
@@ -32,8 +33,8 @@
     overscroll-behavior: none;
     background: var(--bg);
     background-image:
-      radial-gradient(circle at 20% 10%, rgba(0, 242, 254, 0.10) 0%, transparent 45%),
-      radial-gradient(circle at 85% 90%, rgba(179, 136, 255, 0.10) 0%, transparent 45%);
+      radial-gradient(circle at 18% 8%, rgba(0, 242, 254, 0.10) 0%, transparent 42%),
+      radial-gradient(circle at 88% 92%, rgba(179, 136, 255, 0.10) 0%, transparent 42%);
     color: #e8f1f8;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
     display: flex;
@@ -47,9 +48,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    padding-top: calc(8px + env(safe-area-inset-top));
-    background: rgba(8, 12, 20, 0.9);
+    padding: 6px 12px;
+    padding-top: calc(6px + env(safe-area-inset-top));
+    background: rgba(8, 12, 20, 0.92);
     border-bottom: 1px solid var(--line);
   }
 
@@ -59,7 +60,7 @@
     gap: 6px;
     font-size: 12px;
     font-weight: 700;
-    padding: 5px 10px;
+    padding: 4px 10px;
     border-radius: 20px;
     background: rgba(255, 51, 102, 0.15);
     color: var(--rd);
@@ -87,6 +88,7 @@
     margin-left: auto;
     display: flex;
     gap: 10px;
+    align-items: center;
     font-family: Consolas, monospace;
     font-size: 12px;
     color: var(--mut);
@@ -98,36 +100,58 @@
     font-weight: 700;
   }
 
-  /* ── 主体 ── */
+  .badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--mut);
+  }
+
+  .badge.run { background: rgba(0, 230, 118, 0.16); color: var(--gr); }
+  .badge.brake { background: rgba(255, 179, 0, 0.16); color: var(--am); }
+
+  /* ── 主体：左摇杆 + 右数据 ── */
   main {
     flex: 1;
-    display: flex;
     min-height: 0;
-    padding: 10px 12px;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .left {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
   }
 
   .stick-zone {
-    flex: 1;
+    flex: 0 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .stick {
     position: relative;
-    width: min(58vw, 42vh);
+    width: min(100%, 46vh);
     aspect-ratio: 1 / 1;
     border-radius: 50%;
-    background:
-      radial-gradient(circle at 50% 50%, rgba(0, 242, 254, 0.06) 0%, rgba(5, 8, 14, 0.95) 70%);
+    background: radial-gradient(circle at 50% 50%, rgba(0, 242, 254, 0.07) 0%, rgba(5, 8, 14, 0.96) 70%);
     border: 2px solid rgba(0, 242, 254, 0.22);
     box-shadow: 0 0 26px rgba(0, 242, 254, 0.10), inset 0 0 30px rgba(0, 0, 0, 0.7);
     touch-action: none;
   }
 
-  /* 十字参考线 + 45° 扇区提示 */
   .stick::before,
   .stick::after {
     content: "";
@@ -135,21 +159,8 @@
     background: rgba(255, 255, 255, 0.07);
   }
 
-  .stick::before {
-    left: 50%;
-    top: 8%;
-    width: 1px;
-    height: 84%;
-    transform: translateX(-0.5px);
-  }
-
-  .stick::after {
-    top: 50%;
-    left: 8%;
-    height: 1px;
-    width: 84%;
-    transform: translateY(-0.5px);
-  }
+  .stick::before { left: 50%; top: 8%; width: 1px; height: 84%; transform: translateX(-0.5px); }
+  .stick::after { top: 50%; left: 8%; height: 1px; width: 84%; transform: translateY(-0.5px); }
 
   .knob {
     position: absolute;
@@ -165,7 +176,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 800;
     color: #04222a;
     letter-spacing: 1px;
@@ -176,99 +187,80 @@
     transition: none;
   }
 
-  /* ── 右侧按钮列 ── */
-  .btns {
-    width: 34%;
-    max-width: 190px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: center;
+  .pads {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
   }
 
   .btn {
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.05);
     color: #e8f1f8;
-    border-radius: 16px;
-    padding: 14px 6px;
+    border-radius: 14px;
+    padding: 10px 6px;
     font-size: 15px;
     font-weight: 800;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 1px;
     touch-action: none;
     transition: transform .06s, background .15s;
   }
 
   .btn small {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 500;
     color: var(--mut);
-    letter-spacing: .5px;
+    letter-spacing: .4px;
   }
 
-  .btn:active {
-    transform: scale(0.96);
-  }
+  .btn:active { transform: scale(0.96); }
+
+  .btn.run { background: rgba(0, 230, 118, 0.14); border-color: rgba(0, 230, 118, 0.4); color: var(--gr); }
+  .btn.run:active { background: var(--gr); color: #05210f; }
 
   .btn.stop {
     background: rgba(255, 51, 102, 0.18);
     border-color: rgba(255, 51, 102, 0.45);
     color: var(--rd);
-    padding: 22px 6px;
-    font-size: 18px;
+    padding: 14px 6px;
+    font-size: 17px;
   }
 
-  .btn.stop:active {
-    background: var(--rd);
-    color: #fff;
-  }
+  .btn.stop:active { background: var(--rd); color: #fff; }
 
-  .btn.run {
-    background: rgba(0, 230, 118, 0.14);
-    border-color: rgba(0, 230, 118, 0.4);
-    color: var(--gr);
-  }
-
-  .btn.run:active {
-    background: var(--gr);
-    color: #05210f;
-  }
-
-  /* ── 底部限速栏 ── */
-  footer {
-    flex: 0 0 auto;
-    padding: 6px 16px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--line);
-    background: rgba(8, 12, 20, 0.9);
+  .spd {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    min-width: 0;
+    overflow: hidden;
   }
 
-  footer .lab {
-    font-size: 12px;
-    color: var(--mut);
-    white-space: nowrap;
-  }
+  .spd span { font-size: 11px; color: var(--mut); white-space: nowrap; }
 
-  footer .val {
+  .spd b {
     font-family: Consolas, monospace;
-    font-size: 15px;
-    font-weight: 800;
+    font-size: 13px;
     color: var(--am);
-    width: 46px;
+    width: 38px;
+    flex: 0 0 auto;
     text-align: right;
   }
 
   input[type=range] {
     -webkit-appearance: none;
     appearance: none;
-    flex: 1;
-    height: 8px;
-    border-radius: 4px;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 6px;
+    border-radius: 3px;
     background: rgba(255, 255, 255, 0.15);
     outline: none;
     touch-action: auto;
@@ -276,37 +268,272 @@
 
   input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     background: var(--cy);
-    box-shadow: 0 0 12px var(--cy);
+    box-shadow: 0 0 10px var(--cy);
+  }
+
+  /* ── 右列 ── */
+  .right {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .compass-card {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    height: 22vh;
+    max-height: 150px;
+    min-height: 92px;
+  }
+
+  #compass { width: 100%; height: 100%; display: block; }
+
+  .cmp-yaw {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    color: var(--cy);
+    font-weight: 700;
+  }
+
+  .stats {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    padding: 7px 10px;
+  }
+
+  .stats > div {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .stats span {
+    font-size: 10px;
+    color: var(--mut);
+    line-height: 1.3;
+  }
+
+  .stats p {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .stats b {
+    font-family: Consolas, monospace;
+    font-size: 17px;
+    color: #fff;
+    font-weight: 800;
+    letter-spacing: -.4px;
+    line-height: 1.2;
+  }
+
+  .stats i { font-style: normal; font-size: 9px; color: var(--mut); }
+
+  .map-card {
+    flex: 1;
+    min-height: 120px;
+    touch-action: none;
+  }
+
+  #mapCanvas { width: 100%; height: 100%; display: block; }
+
+  .map-tip {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 4px 8px;
+    font-size: 10px;
+    color: var(--mut);
+    background: linear-gradient(transparent, rgba(5, 8, 14, 0.85));
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .map-card:active { border-color: rgba(0, 242, 254, 0.4); }
+
+  /* ── 全屏自动驾驶面板 ── */
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    flex-direction: column;
+    background-color: #05080f;
+    background-image: radial-gradient(circle at 50% 0%, rgba(0, 242, 254, 0.10) 0%, rgba(5, 8, 15, 0) 55%);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .modal.show { display: flex; }
+
+  .modal-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(8, 12, 20, 0.95);
+  }
+
+  .modal-head b { font-size: 15px; letter-spacing: .5px; }
+
+  .modal-head .st {
+    font-size: 11px;
+    color: var(--cy);
+    font-family: Consolas, monospace;
+    margin-left: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 55vw;
+  }
+
+  .xbtn {
+    width: 34px;
+    height: 30px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.05);
+    color: #cbd5e1;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .modal-map {
+    flex: 1;
+    min-height: 0;
+    margin: 8px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    background: rgba(10, 16, 26, 0.7);
+    touch-action: none;
+  }
+
+  .modal-map .map-card {
+    position: absolute;
+    inset: 0;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+  }
+
+  .modal-map .map-tip { display: none; }
+
+  .modal-ctrl {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px 4px;
+    border-top: 1px solid var(--line);
+    background: rgba(8, 12, 20, 0.9);
+  }
+
+  .abtn {
+    flex: 1 1 30%;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.05);
+    color: #e8f1f8;
+    border-radius: 11px;
+    padding: 10px 4px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    touch-action: none;
+  }
+
+  .abtn:active { transform: scale(0.97); }
+
+  .abtn.on {
+    background: rgba(0, 242, 254, 0.16);
+    border-color: rgba(0, 242, 254, 0.5);
+    color: var(--cy);
+  }
+
+  .abtn.warn {
+    background: rgba(255, 51, 102, 0.14);
+    border-color: rgba(255, 51, 102, 0.4);
+    color: var(--rd);
+  }
+
+  .abtn.go {
+    background: rgba(0, 230, 118, 0.16);
+    border-color: rgba(0, 230, 118, 0.45);
+    color: var(--gr);
+  }
+
+  .abtn.sel {
+    flex: 0 0 auto;
+    padding: 10px 8px;
+    font-family: Consolas, monospace;
+    background: rgba(255, 179, 0, 0.12);
+    border-color: rgba(255, 179, 0, 0.35);
+    color: var(--am);
+  }
+
+  .hint {
+    flex: 1 0 100%;
+    font-size: 11px;
+    color: var(--mut);
+    line-height: 1.5;
+    padding: 0 2px 2px;
   }
 
   /* ── 提示条 ── */
   .toast {
     position: fixed;
     left: 50%;
-    top: 46%;
+    top: 44%;
     transform: translate(-50%, -50%) scale(0.96);
-    background: rgba(0, 0, 0, 0.82);
+    background: rgba(0, 0, 0, 0.86);
     border: 1px solid var(--line);
     color: #fff;
     font-size: 13px;
     line-height: 1.6;
-    padding: 14px 18px;
+    padding: 13px 18px;
     border-radius: 14px;
     max-width: 82vw;
     text-align: center;
     opacity: 0;
     pointer-events: none;
     transition: opacity .2s, transform .2s;
-    z-index: 20;
+    z-index: 80;
   }
 
-  .toast.show {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+  .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+  @media (orientation: landscape) {
+    .compass-card { height: 26vh; }
+    .stick { width: min(100%, 62vh); }
   }
 </style>
 </head>
@@ -315,267 +542,1095 @@
 <header>
   <div class="pill" id="pill"><span class="dot"></span><span id="pillTxt">未连接</span></div>
   <div class="hud">
-    <span>V <b id="hSpd">0.00</b></span>
-    <span>D <b id="hDist">0.0</b></span>
-    <span>Y <b id="hYaw">0</b></span>
+    <span class="badge" id="hudState">STOP</span>
+    <span>航向 <b id="hudYaw">0°</b></span>
   </div>
 </header>
 
 <main>
-  <div class="stick-zone">
-    <div class="stick" id="stick">
-      <div class="knob" id="knob">停止</div>
+  <section class="left">
+    <div class="stick-zone">
+      <div class="stick" id="stick"><div class="knob" id="knob">停止</div></div>
     </div>
-  </div>
+    <div class="pads">
+      <button class="btn run" id="btnRun">RUN<small>S1 启停</small></button>
+      <button class="btn" id="btnZero">清零<small>S2 里程航向</small></button>
+    </div>
+    <button class="btn stop" id="btnStop">急停</button>
+    <div class="spd">
+      <span>限速</span>
+      <input type="range" id="spd" min="10" max="100" step="5" value="50">
+      <b id="spdVal">50%</b>
+    </div>
+  </section>
 
-  <div class="btns">
-    <button class="btn stop" id="btnStop">停止<small>急停并刹车</small></button>
-    <button class="btn run" id="btnRun">启停<small>S1 · 切换 RUN</small></button>
-    <button class="btn" id="btnReset">清零<small>S2 · 里程航向</small></button>
-  </div>
+  <section class="right">
+    <div class="card compass-card">
+      <canvas id="compass"></canvas>
+      <div class="cmp-yaw" id="cmpYaw">0°</div>
+    </div>
+    <div class="card stats">
+      <div><span>车速</span><p><b id="stSpeed">0.00</b><i>m/s</i></p></div>
+      <div><span>里程</span><p><b id="stDist">0.00</b><i>m</i></p></div>
+    </div>
+    <div class="card map-card" id="mapWrap">
+      <canvas id="mapCanvas"></canvas>
+      <div class="map-tip" id="mapTip">点击放大 · 自动驾驶</div>
+    </div>
+  </section>
 </main>
 
-<footer>
-  <span class="lab">限速</span>
-  <input type="range" id="spd" min="10" max="100" step="5" value="50">
-  <span class="val" id="spdVal">50%</span>
-</footer>
+<!-- 全屏自动驾驶 -->
+<div class="modal" id="modal">
+  <div class="modal-head">
+    <b>自动驾驶</b>
+    <span class="st" id="autoState">待命</span>
+    <button class="xbtn" id="modalClose">✕</button>
+  </div>
+
+  <div class="modal-map" id="modalHost"></div>
+
+  <div class="modal-ctrl" id="autoBar">
+    <button class="abtn sel" id="autoSpeed">速度 42%</button>
+    <button class="abtn" id="btnCapture">采集轨迹</button>
+    <button class="abtn go" id="btnReplay">回放原路</button>
+    <button class="abtn go" id="btnReturn">原路返回</button>
+    <button class="abtn" id="btnLoop">往返循环</button>
+    <button class="abtn on" id="btnDraw">✏️ 绘制路线</button>
+    <button class="abtn" id="btnReverse">转向反向</button>
+    <button class="abtn warn" id="btnAutoStop">停止</button>
+    <div class="hint" id="autoHint">点击「回放原路」沿当前轨迹行驶；「往返循环」会在两端自动折返，一直来回跑。</div>
+  </div>
+
+  <div class="modal-ctrl" id="drawBar" style="display:none;">
+    <button class="abtn" id="btnUndo">撤销</button>
+    <button class="abtn" id="btnClearDraw">清空</button>
+    <button class="abtn go" id="btnDrawRun">开始循迹</button>
+    <button class="abtn warn" id="btnDrawCancel">取消</button>
+    <div class="hint" id="drawHint">在地图上按住并拖动，画出想让小车走的路线（可多笔）。画完点「开始循迹」。</div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-  /* ══════════════════════════════════════════════════════════════════
-   * 手机手柄（走 web_server.py 的 HTTP 桥接，不用 Web Serial）
-   *
-   * 手机上没法用 Web Serial（只有 Chrome 桌面版才有），所以这里全部通过
-   * 电脑上的 Python 服务转发：
-   *   POST /api/send       下发 !DIR:mask# / 单字符
-   *   GET  /api/telemetry  10Hz 读回速度/里程/航向
-   *
-   * 方向用位掩码 !DIR: 而不是单字符，因为掩码天然支持"斜向"，
-   * 而且松手发 !DIR:0# 能立刻刹车，不用等 400ms 失手保护。
-   * ══════════════════════════════════════════════════════════════════ */
-  const DIR_FWD = 1, DIR_REV = 2, DIR_LEFT = 4, DIR_RIGHT = 8;
+'use strict';
+/* ══════════════════════════════════════════════════════════════════════════
+ * 手机端：手柄遥控 + 航位推算轨迹 + 上位机自动驾驶（回放 / 返回 / 往返 / 手绘）
+ *
+ * 通信全部走电脑上的 web_server.py HTTP 桥：
+ *   POST /api/send      下发 !DIR:mask# / !D:L,R# / 单字符
+ *   GET  /api/telemetry 读回 车速 / 里程 / 航向 / 状态（20Hz）
+ *
+ * 自动驾驶控制环和电脑端是同一套：每收一帧遥测算一次纯追踪输出，
+ * 回一条 !D:<L>,<R>#（千分比）。两端不要同时开自动驾驶。
+ * ══════════════════════════════════════════════════════════════════════════ */
 
-  const stick = document.getElementById('stick');
-  const knob = document.getElementById('knob');
-  const pill = document.getElementById('pill');
-  const pillTxt = document.getElementById('pillTxt');
-  const toastEl = document.getElementById('toast');
+const DIR_FWD = 1, DIR_REV = 2, DIR_LEFT = 4, DIR_RIGHT = 8;
 
-  let mask = 0;
-  let dragging = false;
-  let pointerId = null;
-  let lastTx = 0;
-  let tick = 0;
-  let portOpen = false;
-  let carOnline = false;
+/* ── DOM ── */
+const $ = (id) => document.getElementById(id);
+const stick = $('stick'), knob = $('knob');
+const pill = $('pill'), pillTxt = $('pillTxt');
+const toastEl = $('toast');
+const mapWrap = $('mapWrap');
+const mapCanvas = $('mapCanvas');
+const mapCtx = mapCanvas.getContext('2d');
+const compassCanvas = $('compass');
+const compassCtx = compassCanvas.getContext('2d');
+const modal = $('modal'), modalHost = $('modalHost');
 
-  function toast(msg, ms) {
-    toastEl.innerText = msg;
-    toastEl.classList.add('show');
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => toastEl.classList.remove('show'), ms || 2200);
+/* ── 全局状态 ── */
+const S = { port: false, online: false, speed: 0, dist: 0, yaw: 0, state: 0, pct: 50 };
+
+/* ── 轨迹（航位推算） ── */
+const T = {
+  pts: [{ x: 0, y: 0 }],
+  lastDist: null,
+  yaw: 0,
+  minX: 0, maxX: 0, minY: 0, maxY: 0,
+  w: 1, h: 1, dpr: 1,
+  k: 0.5, cx: 0, cy: 0, fit: true
+};
+
+/* ── 自动驾驶 ── */
+const A = {
+  route: [],
+  dir: 1,
+  active: false,
+  state: 'idle',          /* idle | align | track | pause */
+  loop: false,
+  speed: 42,
+  look: 520,
+  path: [],
+  idx: 0,
+  outL: 0, outR: 0,
+  lastYaw: 0, yawRate: 0, lastTime: 0,
+  alignCnt: 0, largeCnt: 0,
+  t0: 0, pauseUntil: 0,
+  turnDir: 1
+};
+
+/* ── 绘制 ── */
+const D = { on: false, strokes: [], cur: null, downX: 0, downY: 0, moved: false };
+
+/* ══════════════════════ 基础工具 ══════════════════════ */
+function toast(msg, ms) {
+  toastEl.innerHTML = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toastEl.classList.remove('show'), ms || 2200);
+}
+
+function vibrate(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 忽略 */ } }
+
+async function send(cmd) {
+  try {
+    await fetch('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd: cmd })
+    });
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ══════════════════════ 摇杆 ══════════════════════ */
+let mask = 0, dragging = false, pointerId = null, lastTx = 0;
+
+const SECTOR = 0.34;
+
+function maskName(m) {
+  if (m === 0) return '停止';
+  const v = (m & DIR_FWD) ? '前' : ((m & DIR_REV) ? '后' : '');
+  const h = (m & DIR_LEFT) ? '左' : ((m & DIR_RIGHT) ? '右' : '');
+  if (v && h) return v + h;
+  if (v) return v + '进';
+  if (h) return h + '转';
+  return '停止';
+}
+
+function applyKnob(dx, dy) {
+  knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+
+function onStickMove(e) {
+  if (!dragging || e.pointerId !== pointerId) return;
+  const r = stick.getBoundingClientRect();
+  let dx = e.clientX - (r.left + r.width / 2);
+  let dy = e.clientY - (r.top + r.height / 2);
+  const max = r.width / 2 - r.width * 0.20;
+  const len = Math.hypot(dx, dy);
+  if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+  applyKnob(dx, dy);
+
+  const nx = dx / max, ny = dy / max;
+  let m = 0;
+  if (ny < -SECTOR) m |= DIR_FWD;
+  if (ny > SECTOR) m |= DIR_REV;
+  if (nx < -SECTOR) m |= DIR_LEFT;
+  if (nx > SECTOR) m |= DIR_RIGHT;
+
+  if (m !== mask) {
+    mask = m;
+    knob.innerText = maskName(m);
+    knob.classList.toggle('live', m !== 0);
+    sendMask();
+    if (m !== 0 && A.active) autoAbort('人工接管手柄');
+    if (m === 0) vibrate(8);
   }
+}
 
-  async function post(cmd) {
-    try {
-      await fetch('/api/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cmd: cmd })
-      });
-      return true;
-    } catch (e) {
-      return false;
+function sendMask() {
+  lastTx = Date.now();
+  send(`!DIR:${mask}#`);
+}
+
+function releaseStick() {
+  if (!dragging) return;
+  dragging = false;
+  pointerId = null;
+  applyKnob(0, 0);
+  knob.innerText = '停止';
+  knob.classList.remove('live');
+  if (mask !== 0) { mask = 0; sendMask(); }
+}
+
+stick.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  dragging = true;
+  pointerId = e.pointerId;
+  try { stick.setPointerCapture(e.pointerId); } catch (err) { /* 老 Safari */ }
+  onStickMove(e);
+});
+stick.addEventListener('pointermove', onStickMove);
+stick.addEventListener('pointerup', releaseStick);
+stick.addEventListener('pointercancel', releaseStick);
+stick.addEventListener('lostpointercapture', releaseStick);
+
+/* ══════════════════════ 按钮 ══════════════════════ */
+$('btnStop').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  releaseStick();
+  mask = 0;
+  applyKnob(0, 0);
+  knob.innerText = '停止';
+  knob.classList.remove('live');
+  autoAbort('急停');
+  send('!DIR:0#');
+  setTimeout(() => send(' '), 20);
+  vibrate(30);
+  toast('已急停', 1200);
+});
+
+$('btnRun').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  send('1');
+  vibrate(12);
+  toast('启停切换（S1）', 1200);
+});
+
+$('btnZero').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  send('2');
+  trajReset();
+  vibrate(12);
+  toast('里程 / 航向已清零，轨迹回到原点', 1600);
+});
+
+const spd = $('spd'), spdVal = $('spdVal');
+spd.addEventListener('input', () => { spdVal.innerText = spd.value + '%'; });
+spd.addEventListener('change', () => {
+  vibrate(8);
+  send(`!SET:SPD=${spd.value}#`);
+});
+
+/* ══════════════════════ 轨迹 / 地图 ══════════════════════ */
+function trajReset() {
+  T.pts = [{ x: 0, y: 0 }];
+  T.lastDist = null;
+  T.minX = T.maxX = T.minY = T.maxY = 0;
+  T.fit = true;
+}
+
+function carPos() { return T.pts[T.pts.length - 1] || { x: 0, y: 0 }; }
+
+function feedTelemetry(d) {
+  const dist = (d.dist || 0) * 1000;
+  const yaw = (((d.yaw || 0) % 360) + 360) % 360;
+  T.yaw = yaw;
+  if (T.lastDist === null) { T.lastDist = dist; return; }
+  const ds = dist - T.lastDist;
+  T.lastDist = dist;
+  if (!isFinite(ds) || Math.abs(ds) > 300) return;   /* 里程清零/跳变：只断笔 */
+  if (ds === 0) return;
+
+  const th = yaw * Math.PI / 180;
+  const last = carPos();
+  const x = last.x + ds * Math.sin(th);
+  const y = last.y + ds * Math.cos(th);
+  T.pts.push({ x, y });
+  if (x < T.minX) T.minX = x;
+  if (x > T.maxX) T.maxX = x;
+  if (y < T.minY) T.minY = y;
+  if (y > T.maxY) T.maxY = y;
+  if (T.pts.length > 9000) {
+    T.pts.splice(0, 3000);
+    T.minX = T.maxX = T.pts[0].x;
+    T.minY = T.maxY = T.pts[0].y;
+    for (const p of T.pts) {
+      if (p.x < T.minX) T.minX = p.x;
+      if (p.x > T.maxX) T.maxX = p.x;
+      if (p.y < T.minY) T.minY = p.y;
+      if (p.y > T.maxY) T.maxY = p.y;
     }
   }
+}
 
-  /* ── 摇杆 ── */
-  const SECTOR = 0.34;      /* 进入某个方向的阈值（相对半径） */
+function resizeMap() {
+  const r = mapWrap.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width));
+  const h = Math.max(1, Math.round(r.height));
+  if (w === T.w && h === T.h && mapCanvas.width === Math.round(w * dpr)) return;
+  T.w = w; T.h = h; T.dpr = dpr;
+  mapCanvas.width = Math.round(w * dpr);
+  mapCanvas.height = Math.round(h * dpr);
+  mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
 
-  function maskName(m) {
-    if (m === 0) return '停止';
-    const v = (m & DIR_FWD) ? '前' : ((m & DIR_REV) ? '后' : '');
-    const h = (m & DIR_LEFT) ? '左' : ((m & DIR_RIGHT) ? '右' : '');
-    if (v && h) return v + h;
-    if (v) return v + '进';
-    if (h) return h + '转';
-    return '停止';
+/* 世界坐标 → 屏幕坐标（与电脑端同一套公式） */
+function sx(wx) { return T.w / 2 + (wx - T.cx) * T.k; }
+function sy(wy) { return T.h / 2 - (wy - T.cy) * T.k; }
+function wxOf(px) { return (px - T.w / 2) / T.k + T.cx; }
+function wyOf(py) { return T.cy - (py - T.h / 2) / T.k; }
+
+function updateView() {
+  if (!T.fit) return;
+  const pad = 18;
+  const spanX = Math.max(900, T.maxX - T.minX);
+  const spanY = Math.max(900, T.maxY - T.minY);
+  const kTarget = Math.min((T.w - pad * 2) / spanX, (T.h - pad * 2) / spanY);
+  if (!isFinite(kTarget) || kTarget <= 0) return;
+  const kNew = Math.min(kTarget, 1.6);
+  /* 需要缩小视野时必须立刻跟上，否则轨迹会长出屏幕；
+   * 需要放大时慢慢来，避免画面一抖一抖。 */
+  T.k = (kNew < T.k) ? kNew : T.k + (kNew - T.k) * 0.10;
+  const cxT = (T.minX + T.maxX) / 2;
+  const cyT = (T.minY + T.maxY) / 2;
+  T.cx += (cxT - T.cx) * 0.25;
+  T.cy += (cyT - T.cy) * 0.25;
+}
+
+function drawGrid() {
+  const c = mapCtx;
+  c.strokeStyle = 'rgba(255,255,255,0.045)';
+  c.lineWidth = 1;
+  const step = 500 * T.k;
+  if (step > 8) {
+    const ox = sx(0) % step, oy = sy(0) % step;
+    for (let x = ox; x < T.w; x += step) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, T.h); c.stroke(); }
+    for (let y = oy; y < T.h; y += step) { c.beginPath(); c.moveTo(0, y); c.lineTo(T.w, y); c.stroke(); }
+  }
+}
+
+function drawPoly(pts, color, width, dash) {
+  if (!pts || pts.length < 2) return;
+  const c = mapCtx;
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = width;
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  if (dash) c.setLineDash(dash);
+  c.beginPath();
+  c.moveTo(sx(pts[0].x), sy(pts[0].y));
+  for (let i = 1; i < pts.length; i++) c.lineTo(sx(pts[i].x), sy(pts[i].y));
+  c.stroke();
+  c.restore();
+}
+
+function drawCar() {
+  const p = carPos();
+  const c = mapCtx;
+  c.save();
+  c.translate(sx(p.x), sy(p.y));
+  c.rotate(T.yaw * Math.PI / 180);
+  c.fillStyle = '#00f2fe';
+  c.shadowColor = '#00f2fe';
+  c.shadowBlur = 10;
+  c.beginPath();
+  c.moveTo(0, -9);
+  c.lineTo(6.5, 7);
+  c.lineTo(0, 4);
+  c.lineTo(-6.5, 7);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+function drawFlag(p, color) {
+  if (!p) return;
+  const c = mapCtx;
+  const x = sx(p.x), y = sy(p.y);
+  c.save();
+  c.strokeStyle = color;
+  c.fillStyle = color;
+  c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(x, y); c.lineTo(x, y - 14); c.stroke();
+  c.beginPath(); c.moveTo(x, y - 14); c.lineTo(x + 10, y - 11); c.lineTo(x, y - 8); c.closePath(); c.fill();
+  c.restore();
+}
+
+function renderMap() {
+  resizeMap();
+  updateView();
+  const c = mapCtx;
+  c.clearRect(0, 0, T.w, T.h);
+  drawGrid();
+
+  /* 走过的轨迹 */
+  drawPoly(T.pts, 'rgba(0, 242, 254, 0.55)', 1.6);
+
+  /* 规范路线（起点→终点） */
+  if (A.route.length > 1) {
+    drawPoly(A.route, 'rgba(0, 230, 118, 0.55)', 2, [5, 4]);
+    drawFlag(A.route[A.route.length - 1], '#00e676');
+    drawFlag(A.route[0], '#8899a6');
   }
 
-  function applyKnob(dx, dy) {
-    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  /* 手绘中的线 */
+  for (const st of D.strokes) drawPoly(st, '#ffb300', 2.6);
+  if (D.cur) drawPoly(D.cur, '#ffb300', 2.6);
+
+  drawCar();
+
+  /* 比例尺 */
+  c.fillStyle = 'rgba(255,255,255,0.45)';
+  c.font = '10px Consolas, monospace';
+  c.textAlign = 'left';
+  const barMM = 1000, barPx = barMM * T.k;
+  if (barPx > 20 && barPx < T.w * 0.6) {
+    const y0 = T.h - 12;
+    c.strokeStyle = 'rgba(255,255,255,0.45)';
+    c.lineWidth = 2;
+    c.beginPath(); c.moveTo(10, y0); c.lineTo(10 + barPx, y0); c.stroke();
+    c.fillText('1 m', 12 + barPx, y0 + 3);
+  }
+}
+
+/* ══════════════════════ 罗盘 ══════════════════════ */
+function renderCompass() {
+  const r = compassCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  if (compassCanvas.width !== Math.round(w * dpr) || compassCanvas.height !== Math.round(h * dpr)) {
+    compassCanvas.width = Math.round(w * dpr);
+    compassCanvas.height = Math.round(h * dpr);
+  }
+  const c = compassCtx;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 6;
+  if (R < 8) return;
+
+  c.strokeStyle = 'rgba(255,255,255,0.14)';
+  c.lineWidth = 1.5;
+  c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
+
+  /* 刻度 */
+  for (let a = 0; a < 360; a += 30) {
+    const rad = (a - 90) * Math.PI / 180;
+    const r1 = R * (a % 90 === 0 ? 0.80 : 0.88);
+    c.strokeStyle = a % 90 === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.13)';
+    c.beginPath();
+    c.moveTo(cx + Math.cos(rad) * r1, cy + Math.sin(rad) * r1);
+    c.lineTo(cx + Math.cos(rad) * R, cy + Math.sin(rad) * R);
+    c.stroke();
   }
 
-  function onMove(e) {
-    if (!dragging || e.pointerId !== pointerId) return;
-    const r = stick.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    let dx = e.clientX - cx;
-    let dy = e.clientY - cy;
+  /* 指针：车头方向 */
+  const rad = (T.yaw - 90) * Math.PI / 180;
+  c.save();
+  c.translate(cx, cy);
+  c.rotate(rad + Math.PI / 2);
+  c.fillStyle = '#00f2fe';
+  c.shadowColor = '#00f2fe';
+  c.shadowBlur = 8;
+  c.beginPath();
+  c.moveTo(0, -R * 0.72);
+  c.lineTo(R * 0.16, R * 0.34);
+  c.lineTo(0, R * 0.18);
+  c.lineTo(-R * 0.16, R * 0.34);
+  c.closePath();
+  c.fill();
+  c.restore();
 
-    const max = r.width / 2 - r.width * 0.20;   /* 摇杆最大位移 */
-    const len = Math.hypot(dx, dy);
-    if (len > max) {
-      dx = dx / len * max;
-      dy = dy / len * max;
+  c.fillStyle = 'rgba(255,255,255,0.5)';
+  c.font = '9px Consolas, monospace';
+  c.textAlign = 'center';
+}
+
+/* ══════════════════════ 自动驾驶核心 ══════════════════════
+ * 与电脑端同一套：纯追踪前视 + 横向偏距软补偿 + 角速度反舵阻尼。
+ * 差别只在通信：这里全走 HTTP 桥。
+ */
+function dist2(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+/* 轨迹稀释成路点（约 60mm 一点） */
+function routeFromTraj() {
+  const src = T.pts;
+  if (src.length < 10) return null;
+  const out = [];
+  let lx = null, ly = null;
+  for (let i = 0; i < src.length; i++) {
+    const p = src[i];
+    if (lx === null || Math.hypot(p.x - lx, p.y - ly) >= 60 || i === src.length - 1) {
+      out.push({ x: p.x, y: p.y });
+      lx = p.x; ly = p.y;
     }
-    applyKnob(dx, dy);
+  }
+  return out.length >= 3 ? out : null;
+}
 
-    const nx = dx / max;
-    const ny = dy / max;
+function routeLen(pts) {
+  let l = 0;
+  for (let i = 1; i < pts.length; i++) l += dist2(pts[i], pts[i - 1]);
+  return l;
+}
 
-    let m = 0;
-    if (ny < -SECTOR) m |= DIR_FWD;
-    if (ny > SECTOR) m |= DIR_REV;
-    if (nx < -SECTOR) m |= DIR_LEFT;
-    if (nx > SECTOR) m |= DIR_RIGHT;
+function setAutoState(txt) {
+  const el = $('autoState');
+  if (el) el.innerText = txt;
+}
 
-    if (m !== mask) {
-      mask = m;
-      knob.innerText = maskName(m);
-      knob.classList.toggle('live', m !== 0);
-      sendMask();                    /* 变化立刻发，不等下一个 tick */
-      if (m === 0) vibrate(8);
+function autoAbort(reason) {
+  if (!A.active) return;
+  A.active = false;
+  A.state = 'idle';
+  A.path = [];
+  setAutoState('已接管');
+  if (reason) toast(reason + '，自动退出', 1500);
+}
+
+function buildPath(route) {
+  const cur = carPos();
+  const path = [];
+  if (dist2(cur, route[0]) > 70) path.push({ x: cur.x, y: cur.y });
+  for (const p of route) path.push({ x: p.x, y: p.y });
+  A.path = path;
+  A.idx = 0;
+  A.outL = 0;
+  A.outR = 0;
+  A.lastYaw = T.yaw;
+  A.yawRate = 0;
+  A.lastTime = 0;
+  A.alignCnt = 0;
+  A.largeCnt = 0;
+  A.t0 = Date.now();
+}
+
+function startDrive(dir) {
+  if (!A.route.length) { toast('还没有路线：先「采集轨迹」或「绘制路线」'); return; }
+  A.active = true;
+  A.dir = dir;
+  const route = (dir > 0) ? A.route.slice() : A.route.slice().reverse();
+  buildPath(route);
+  /* 车头离首段方向太远才原地掉头，否则直接贴线，省一次停顿 */
+  A.state = 'track';
+  {
+    const q0 = A.path[0], q1 = A.path[Math.min(3, A.path.length - 1)];
+    if (q1 && (q1.x !== q0.x || q1.y !== q0.y)) {
+      const want0 = Math.atan2(q1.x - q0.x, q1.y - q0.y) * 180 / Math.PI;
+      let e0 = want0 - T.yaw;
+      while (e0 > 180) e0 -= 360;
+      while (e0 < -180) e0 += 360;
+      if (Math.abs(e0) > 35) A.state = 'align';
+    } else {
+      A.state = 'align';
     }
   }
+  const km = (routeLen(route) / 1000).toFixed(2);
+  setAutoState((dir > 0 ? '前往终点 ' : '返回起点 ') + km + 'm');
+  send('!DIR:0#');
+  vibrate(12);
+}
 
-  function sendMask() {
-    lastTx = Date.now();
-    post(`!DIR:${mask}#`);
+function arrive() {
+  if (A.loop) {
+    A.dir = -A.dir;
+    A.state = 'pause';
+    A.pauseUntil = Date.now() + 1200;
+    send('!D:0,0#');
+    setAutoState(A.dir > 0 ? '折返 → 前往终点' : '折返 → 返回起点');
+    toast(A.dir > 0 ? '到达起点，1.2s 后再次前往终点' : '到达终点，1.2s 后原路返回', 1600);
+    return;
+  }
+  A.active = false;
+  A.state = 'idle';
+  A.path = [];
+  send('!D:0,0#');
+  send(' ');
+  setAutoState('已到达');
+  toast('已到达终点', 1600);
+}
+
+function autoStep() {
+  if (!A.active) return;
+
+  if (A.state === 'pause') {
+    if (Date.now() < A.pauseUntil) return;
+    const route = (A.dir > 0) ? A.route.slice() : A.route.slice().reverse();
+    buildPath(route);
+    A.state = 'align';
+    setAutoState(A.dir > 0 ? '前往终点…' : '返回起点…');
+    return;
   }
 
-  function release() {
-    if (!dragging) return;
-    dragging = false;
-    pointerId = null;
-    applyKnob(0, 0);
-    knob.innerText = '停止';
-    knob.classList.remove('live');
-    if (mask !== 0) {
-      mask = 0;
-      sendMask();                    /* 松手立刻刹车（车端 !DIR:0 就是刹） */
-    }
+  const path = A.path;
+  if (path.length < 2) { A.active = false; return; }
+  const p = carPos();
+
+  /* 1) 最近路点（限窗，避免抄近道） */
+  const from = Math.max(0, A.idx - 6);
+  const to = Math.min(path.length, A.idx + 45);
+  let best = A.idx, bd = Infinity;
+  for (let i = from; i < to; i++) {
+    const dx = path[i].x - p.x, dy = path[i].y - p.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bd) { bd = d2; best = i; }
+  }
+  A.idx = best;
+
+  /* 2) 前视点 */
+  let j = best, acc = 0;
+  while (j < path.length - 1 && acc < A.look) {
+    acc += dist2(path[j + 1], path[j]);
+    j++;
   }
 
-  stick.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    dragging = true;
-    pointerId = e.pointerId;
-    try { stick.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件/老 Safari */ }
-    onMove(e);
-  });
-  stick.addEventListener('pointermove', onMove);
-  stick.addEventListener('pointerup', release);
-  stick.addEventListener('pointercancel', release);
-  stick.addEventListener('lostpointercapture', release);
+  /* 3) 到点判定 */
+  const endP = path[path.length - 1];
+  const dEnd = dist2(endP, p);
+  if (dEnd < 80) { arrive(); return; }
 
-  /* ── 按钮 ── */
-  function vibrate(ms) {
-    if (navigator.vibrate) navigator.vibrate(ms);
+  if (Date.now() - A.t0 > 150000) {
+    A.active = false; A.state = 'idle'; A.path = [];
+    send('!D:0,0#'); send(' ');
+    setAutoState('超时停车');
+    toast('超过 150s 未到点，已强制停车', 2000);
+    return;
   }
 
-  const btnStop = document.getElementById('btnStop');
-  btnStop.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    mask = 0;
-    applyKnob(0, 0);
-    knob.innerText = '停止';
-    knob.classList.remove('live');
-    post('!DIR:0#');
-    setTimeout(() => post(' '), 20);       /* 空格 = 急停 + 状态回 STOP */
-    vibrate(30);
-    toast('已急停', 1200);
-  });
+  /* 4) 目标方位与航向误差 */
+  let ldx = path[j].x - p.x, ldy = path[j].y - p.y;
+  if (Math.hypot(ldx, ldy) < 15 && j < path.length - 1) {
+    ldx = path[j + 1].x - p.x;
+    ldy = path[j + 1].y - p.y;
+  }
+  const want = Math.atan2(ldx, ldy) * 180 / Math.PI;
+  let err = want - T.yaw;
+  while (err > 180) err -= 360;
+  while (err < -180) err += 360;
+  const aerr = Math.abs(err);
 
-  document.getElementById('btnRun').addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    post('1');
-    vibrate(12);
-    toast('启停切换（S1）', 1200);
-  });
-
-  document.getElementById('btnReset').addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    post('2');
-    vibrate(12);
-    toast('里程 / 航向已清零（S2）', 1500);
-  });
-
-  /* ── 限速 ── */
-  const spd = document.getElementById('spd');
-  const spdVal = document.getElementById('spdVal');
-  let spdTimer = null;
-
-  spd.addEventListener('input', () => {
-    spdVal.innerText = spd.value + '%';
-  });
-  spd.addEventListener('change', () => {
-    /* 松手才下发，避免拖动过程中刷几十条 */
-    clearTimeout(spdTimer);
-    spdTimer = setTimeout(() => post(`!SET:SPD=${spd.value}#`), 60);
-    vibrate(8);
-  });
-
-  /* ── 心跳 + 遥测 ── */
-  async function pollTelemetry() {
-    try {
-      const res = await fetch('/api/telemetry');
-      const j = await res.json();
-      portOpen = !!j.connected;
-      carOnline = !!j.online;
-
-      if (carOnline) {
-        pill.className = 'pill on';
-        pillTxt.innerText = '在线 ' + Math.round(j.age_ms || 0) + 'ms';
-        const d = j.data || {};
-        document.getElementById('hSpd').innerText = (d.speed || 0).toFixed(2);
-        document.getElementById('hDist').innerText = (d.dist || 0).toFixed(1);
-        document.getElementById('hYaw').innerText = Math.round(d.yaw || 0);
-      } else if (portOpen) {
-        pill.className = 'pill';
-        pillTxt.innerText = '等待小车…';
-      } else {
-        pill.className = 'pill';
-        pillTxt.innerText = '电脑未连串口';
+  /* 5) 原地对齐阶段 */
+  if (A.state === 'align') {
+    if (aerr <= 18) {
+      A.alignCnt++;
+      if (A.alignCnt >= 2) {
+        A.state = 'track';
+        A.lastYaw = T.yaw;
+        A.yawRate = 0;
+        A.lastTime = 0;
+        A.outL = 0;
+        A.outR = 0;
       }
-    } catch (e) {
-      pill.className = 'pill';
-      pillTxt.innerText = '电脑服务离线';
+    } else {
+      A.alignCnt = 0;
+    }
+    if (A.state === 'align') {
+      const sgn = err > 0 ? 1 : -1;
+      const pwr = 23 + Math.min(13, aerr * 0.18);
+      const tl = A.turnDir * sgn * pwr;
+      const tr = -A.turnDir * sgn * pwr;
+      A.outL = A.outL * 0.5 + tl * 0.5;
+      A.outR = A.outR * 0.5 + tr * 0.5;
+      send(`!D:${Math.round(A.outL * 10)},${Math.round(A.outR * 10)}#`);
+      setAutoState(`掉头中 · 差 ${aerr.toFixed(0)}°`);
+      return;
     }
   }
 
-  /* 100ms 一次：方向按住时每 200ms 补发（车端 400ms 失手保护） */
-  setInterval(() => {
-    tick++;
-    if (mask !== 0 && Date.now() - lastTx > 200) sendMask();
-    if (tick % 2 === 0) pollTelemetry();
-  }, 100);
+  /* 6) 横向偏距（软补偿） */
+  let pA = path[best];
+  let pB = (best < path.length - 1) ? path[best + 1] : path[best];
+  if (best === path.length - 1 && best > 0) { pA = path[best - 1]; pB = path[best]; }
+  const segDx = pB.x - pA.x, segDy = pB.y - pA.y;
+  const segLen = Math.hypot(segDx, segDy);
+  let crossDist = 0;
+  if (segLen > 1) crossDist = (segDx * (p.y - pA.y) - segDy * (p.x - pA.x)) / segLen;
 
-  /* 页面切到后台时松手，防止"揣兜里车自己跑" */
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) release();
-  });
-  window.addEventListener('blur', release);
-
-  /* 屏幕常亮（部分浏览器需要用户手势之后才允许） */
-  let wakeLock = null;
-  async function keepAwake() {
-    try {
-      if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-    } catch (e) { /* 不支持就算了 */ }
+  let crossBias = 0;
+  if (Math.abs(crossDist) > 25) {
+    const excess = Math.abs(crossDist) - 25;
+    crossBias = Math.sign(crossDist) * Math.min(6, excess * 0.04);
   }
-  document.addEventListener('pointerdown', keepAwake, { once: true });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') keepAwake();
-  });
 
+  let fusedErr = err + crossBias;
+  while (fusedErr > 180) fusedErr -= 360;
+  while (fusedErr < -180) fusedErr += 360;
+
+  if (Math.abs(err) > 85) {
+    if (++A.largeCnt > 5) {
+      A.state = 'align';
+      A.largeCnt = 0;
+      return;
+    }
+  } else {
+    A.largeCnt = 0;
+  }
+
+  /* 7) PD + 角速度阻尼 */
+  const now = Date.now();
+  const dt = Math.max(0.02, Math.min(0.15, (A.lastTime ? (now - A.lastTime) : 50) / 1000));
+  A.lastTime = now;
+  let dYaw = T.yaw - A.lastYaw;
+  while (dYaw > 180) dYaw -= 360;
+  while (dYaw < -180) dYaw += 360;
+  const rawRate = dYaw / dt;
+  A.lastYaw = T.yaw;
+  A.yawRate = A.yawRate * 0.5 + rawRate * 0.5;
+
+  let turn = 0;
+  if (Math.abs(fusedErr) <= 1.2 && Math.abs(crossDist) <= 18) {
+    turn = 0;
+  } else {
+    turn = 0.38 * fusedErr - 0.045 * A.yawRate;
+  }
+
+  /* 8) 速度规划与输出 */
+  const aFused = Math.abs(fusedErr);
+  let remain = dist2(path[j], p);
+  for (let i = j; i < path.length - 1; i++) remain += dist2(path[i + 1], path[i]);
+  let v = A.speed * (1.0 - 0.25 * Math.min(1.0, aFused / 45.0));
+  v *= (0.60 + 0.40 * Math.min(1.0, remain / 450.0));
+  if (v < 30) v = 30;
+
+  const turnMax = Math.max(10, A.speed - 16);
+  turn = Math.max(-turnMax, Math.min(turnMax, turn));
+
+  const tl = v + A.turnDir * turn;
+  const tr = v - A.turnDir * turn;
+  A.outL = (A.outL || v) * 0.30 + tl * 0.70;
+  A.outR = (A.outR || v) * 0.30 + tr * 0.70;
+
+  const oL = Math.max(-100, Math.min(100, A.outL));
+  const oR = Math.max(-100, Math.min(100, A.outR));
+  send(`!D:${Math.round(oL * 10)},${Math.round(oR * 10)}#`);
+  setAutoState((A.dir > 0 ? '去程 ' : '返程 ') +
+    (remain / 1000).toFixed(2) + 'm · 偏' + fusedErr.toFixed(1) + '°');
+}
+
+/* ══════════════════════ 手绘路线 ══════════════════════ */
+function drawFlatten() {
+  const all = [];
+  for (const st of D.strokes) for (const p of st) all.push(p);
+  return all;
+}
+
+/* 屏幕坐标轨迹 → 世界坐标 + 按 60mm 重采样 */
+function drawnRoute() {
+  const flat = drawFlatten();
+  if (flat.length < 2) return null;
+  const wpts = flat.map(p => ({ x: wxOf(p.x), y: wyOf(p.y) }));
+  const out = [wpts[0]];
+  for (let i = 1; i < wpts.length; i++) {
+    if (dist2(wpts[i], out[out.length - 1]) >= 60) out.push(wpts[i]);
+  }
+  const last = wpts[wpts.length - 1];
+  if (dist2(last, out[out.length - 1]) > 5) out.push(last);
+  return out.length >= 2 ? out : null;
+}
+
+function drawModeOn(on) {
+  D.on = on;
+  D.strokes = [];
+  D.cur = null;
+  $('drawBar').style.display = on ? 'flex' : 'none';
+  $('autoBar').style.display = on ? 'none' : 'flex';
+  $('btnDraw').classList.toggle('on', on);
+  if (on) {
+    T.fit = false;                       /* 画的时候地图不许动 */
+    $('drawHint').innerText = '在地图上按住并拖动，画出想让小车走的路线（可多笔）。画完点「开始循迹」。';
+    if (!modal.classList.contains('show')) { modal.classList.add('show'); moveMapTo(modalHost); }
+    toast('绘制模式：拖动地图画线', 2000);
+  } else {
+    T.fit = true;
+  }
+}
+
+/* 把小地图搬到全屏面板里 / 搬回右列（紧跟里程卡片之后） */
+function moveMapTo(parent) {
+  if (!parent) return;
+  if (parent === modalHost) {
+    modalHost.appendChild(mapWrap);
+  } else {
+    const stats = parent.querySelector('.stats');
+    parent.insertBefore(mapWrap, stats ? stats.nextSibling : null);
+  }
+  requestAnimationFrame(() => { resizeMap(); renderMap(); });
+}
+
+/* ══════════════════════ 地图交互（点击放大 / 绘制） ══════════════════════ */
+mapWrap.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const r = mapWrap.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+
+  if (D.on && modal.classList.contains('show')) {
+    try { mapWrap.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+    D.cur = [{ x: px, y: py }];
+    return;
+  }
+
+  D.downX = e.clientX;
+  D.downY = e.clientY;
+  D.moved = false;
+});
+
+mapWrap.addEventListener('pointermove', (e) => {
+  const r = mapWrap.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+
+  if (D.on && modal.classList.contains('show')) {
+    if (!D.cur) return;
+    const last = D.cur[D.cur.length - 1];
+    if (Math.hypot(px - last.x, py - last.y) < 4) return;
+    D.cur.push({ x: px, y: py });
+    return;
+  }
+
+  if (Math.hypot(e.clientX - D.downX, e.clientY - D.downY) > 8) D.moved = true;
+});
+
+function endMapPointer(e) {
+  const r = mapWrap.getBoundingClientRect();
+
+  if (D.on && modal.classList.contains('show')) {
+    if (D.cur && D.cur.length > 1) D.strokes.push(D.cur);
+    D.cur = null;
+    return;
+  }
+
+  if (!D.moved) {
+    /* 小地图点一下 = 打开全屏自动驾驶 */
+    if (!modal.classList.contains('show')) openAuto();
+  }
+}
+
+mapWrap.addEventListener('pointerup', endMapPointer);
+mapWrap.addEventListener('pointercancel', () => { D.cur = null; });
+
+/* ══════════════════════ 全屏面板 ══════════════════════ */
+function openAuto() {
+  modal.classList.add('show');
+  moveMapTo(modalHost);
+  renderMap();
+  setAutoState(A.active ? '运行中' : '待命');
+}
+
+function closeAuto() {
+  if (D.on) { D.on = false; $('drawBar').style.display = 'none'; $('autoBar').style.display = 'flex'; $('btnDraw').classList.remove('on'); }
+  T.fit = true;
+  modal.classList.remove('show');
+  moveMapTo(document.querySelector('.right'));
+}
+
+$('modalClose').addEventListener('click', closeAuto);
+
+/* ══════════════════════ 自动驾驶按钮 ══════════════════════ */
+const SPD_STEPS = [35, 42, 50, 60];
+let spdIdx = 1;
+$('autoSpeed').addEventListener('click', () => {
+  spdIdx = (spdIdx + 1) % SPD_STEPS.length;
+  A.speed = SPD_STEPS[spdIdx];
+  A.look = 420 + A.speed * 2.5;
+  $('autoSpeed').innerText = '速度 ' + A.speed + '%';
+  lsSet('auto_speed', String(A.speed));
+  vibrate(8);
+});
+(function () {
+  const v = parseInt(lsGet('auto_speed') || '', 10);
+  if (SPD_STEPS.indexOf(v) >= 0) {
+    spdIdx = SPD_STEPS.indexOf(v);
+    A.speed = v;
+    A.look = 420 + A.speed * 2.5;
+    $('autoSpeed').innerText = '速度 ' + A.speed + '%';
+  }
+})();
+
+/* 转向极性：和电脑端共用同一个 localStorage 键 */
+(function () {
+  const s = parseInt(lsGet('traj_steer_dir') || '', 10);
+  if (s === 1 || s === -1) A.turnDir = s;
+  $('btnReverse').classList.toggle('on', A.turnDir === -1);
+})();
+
+$('btnReverse').addEventListener('click', () => {
+  A.turnDir = -A.turnDir;
+  lsSet('traj_steer_dir', String(A.turnDir));
+  $('btnReverse').classList.toggle('on', A.turnDir === -1);
+  toast('转向极性：' + (A.turnDir > 0 ? '正常' : '反向') + '（两端同步）', 1600);
+});
+
+$('btnCapture').addEventListener('click', () => {
+  const r = routeFromTraj();
+  if (!r) { toast('轨迹太短，先手动开一段再采集'); return; }
+  A.route = r;
+  toast(`已采集 ${r.length} 个路点 / ${(routeLen(r) / 1000).toFixed(2)} m`, 2200);
+  setAutoState('已采集路线');
+});
+
+$('btnReplay').addEventListener('click', () => {
+  if (A.active) { stopAuto(); return; }
+  if (!A.route.length) {
+    const r = routeFromTraj();
+    if (!r) { toast('轨迹太短：先手动开一段，或手绘路线'); return; }
+    A.route = r;
+  }
+  startDrive(1);
+});
+
+$('btnReturn').addEventListener('click', () => {
+  if (A.active) { stopAuto(); return; }
+  if (!A.route.length) {
+    const r = routeFromTraj();
+    if (!r) { toast('轨迹太短：先手动开一段，或手绘路线'); return; }
+    A.route = r;
+  }
+  startDrive(-1);
+});
+
+$('btnLoop').addEventListener('click', () => {
+  A.loop = !A.loop;
+  $('btnLoop').classList.toggle('on', A.loop);
+  $('autoHint').innerText = A.loop
+    ? '往返循环已开启：到终点自动掉头返回，到起点再自动前往终点，直到点「停止」。'
+    : '点击「回放原路」沿当前轨迹行驶；「往返循环」会在两端自动折返，一直来回跑。';
+  toast(A.loop ? '往返循环：开' : '往返循环：关', 1500);
+  if (A.loop && !A.active) {
+    if (!A.route.length) {
+      const r = routeFromTraj();
+      if (r) A.route = r;
+    }
+    if (A.route.length) {
+      startDrive(1);
+    } else {
+      A.loop = false;
+      $('btnLoop').classList.remove('on');
+      toast('还没有路线：先手动开一段再「采集轨迹」，或直接「绘制路线」', 2400);
+    }
+  }
+});
+
+function stopAuto() {
+  A.active = false;
+  A.state = 'idle';
+  A.path = [];
+  send('!D:0,0#');
+  send(' ');
+  setAutoState('待命');
+  vibrate(20);
+}
+
+$('btnAutoStop').addEventListener('click', () => { stopAuto(); toast('自动驾驶已停止', 1400); });
+
+$('btnDraw').addEventListener('click', () => { drawModeOn(true); });
+$('btnDrawCancel').addEventListener('click', () => { drawModeOn(false); });
+$('btnUndo').addEventListener('click', () => {
+  if (D.cur) { D.cur = null; return; }
+  D.strokes.pop();
+  $('drawHint').innerText = D.strokes.length ? `已画 ${D.strokes.length} 笔，可继续画或开始循迹。` : '在地图上按住并拖动，画出想让小车走的路线（可多笔）。';
+});
+$('btnClearDraw').addEventListener('click', () => {
+  D.strokes = []; D.cur = null;
+  $('drawHint').innerText = '已清空，重新画一条。';
+});
+$('btnDrawRun').addEventListener('click', () => {
+  const r = drawnRoute();
+  if (!r) { toast('还没画线：先在地图上拖一条'); return; }
+  A.route = r;
+  A.loop = false;
+  $('btnLoop').classList.remove('on');
+  drawModeOn(false);
+  startDrive(1);
+  toast(`开始循迹：${r.length} 个路点 / ${(routeLen(r) / 1000).toFixed(2)} m`, 2200);
+});
+
+/* ══════════════════════ 遥测轮询 ══════════════════════ */
+let pollTimer = null;
+
+async function pollTelemetry() {
+  let fast = A.active || modal.classList.contains('show');
+  try {
+    const res = await fetch('/api/telemetry');
+    const j = await res.json();
+    S.port = !!j.connected;
+    S.online = !!j.online;
+
+    if (S.online) {
+      pill.className = 'pill on';
+      pillTxt.innerText = '在线 ' + Math.round(j.age_ms || 0) + 'ms';
+      const d = j.data || {};
+      S.speed = d.speed || 0;
+      S.dist = d.dist || 0;
+      S.state = d.state || 0;
+      feedTelemetry(d);
+
+      $('stSpeed').innerText = S.speed.toFixed(2);
+      $('stDist').innerText = S.dist.toFixed(2);
+      $('hudYaw').innerText = Math.round(((d.yaw || 0) % 360 + 360) % 360) + '°';
+      $('cmpYaw').innerText = ((d.yaw || 0) >= 0 ? '+' : '') + (d.yaw || 0).toFixed(0) + '°';
+
+      const st = $('hudState');
+      if (S.state === 1) { st.innerText = 'RUN'; st.className = 'badge run'; }
+      else if (S.state === 3) { st.innerText = 'BRAKE'; st.className = 'badge brake'; }
+      else { st.innerText = 'STOP'; st.className = 'badge'; }
+
+      if (A.active) autoStep();
+    } else if (S.port) {
+      pill.className = 'pill';
+      pillTxt.innerText = '等待小车…';
+    } else {
+      pill.className = 'pill';
+      pillTxt.innerText = '电脑未连串口';
+    }
+  } catch (e) {
+    pill.className = 'pill';
+    pillTxt.innerText = '电脑服务离线';
+  }
+
+  /* 自动驾驶时 20Hz 轮询，其它时候 10Hz */
+  pollTimer = setTimeout(pollTelemetry, (A.active || fast) ? 50 : 100);
+}
+
+/* ══════════════════════ 渲染循环 ══════════════════════ */
+let lastDraw = 0;
+function loop() {
+  const now = performance.now();
+  if (now - lastDraw > 50) {
+    lastDraw = now;
+    renderMap();
+    renderCompass();
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ══════════════════════ 生命周期 ══════════════════════ */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    releaseStick();
+    if (A.active) autoAbort('页面切到后台');
+  }
+});
+window.addEventListener('blur', releaseStick);
+window.addEventListener('resize', () => { resizeMap(); });
+window.addEventListener('orientationchange', () => { setTimeout(resizeMap, 200); });
+
+let wakeLock = null;
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { /* 忽略 */ }
+}
+document.addEventListener('pointerdown', keepAwake, { once: true });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') keepAwake();
+});
+
+/* 启动 */
+(function boot() {
+  /* 手柄默认值同步车端限速 */
+  spd.value = '50';
+  spdVal.innerText = '50%';
+  resizeMap();
+  setInterval(() => {
+    if (mask !== 0 && Date.now() - lastTx > 200) sendMask();
+  }, 100);
+  requestAnimationFrame(loop);
   pollTelemetry();
+
+  /* 深链：手机浏览器可以直接收藏 http://ip:8080/mobile.html#auto */
+  if (location.hash === '#auto') setTimeout(openAuto, 120);
+  else if (location.hash === '#draw') setTimeout(() => { openAuto(); drawModeOn(true); }, 120);
+
   if (!location.protocol.startsWith('http')) {
     toast('请通过电脑服务打开：<br>http://电脑IP:8080/mobile.html', 6000);
   }
+})();
 </script>
 </body>
 </html>
