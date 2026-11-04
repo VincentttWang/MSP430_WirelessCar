@@ -795,11 +795,31 @@
     /* 画线时地图上的覆盖层 */
     #drawOverlay {
       position: absolute;
-      inset: 0;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
       pointer-events: none;
       display: none;
     }
     #drawOverlay.on { display: block; }
+    .draw-hud {
+      position: absolute;
+      left: 10px;
+      top: 8px;
+      padding: 3px 8px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 179, 0, 0.35);
+      color: #ffd166;
+      font: 10px/1.5 "Consolas", monospace;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+    }
+    .map-wrap.drawing .draw-hud { display: block; }
     .map-wrap.drawing { cursor: crosshair; }
     .map-wrap.drawing .map-hint::after { content: ''; }
     .auto-sel {
@@ -1602,6 +1622,7 @@
         <div class="map-wrap" id="mapWrap" ondblclick="if(!this.classList.contains('drawing')) openEnlargeModal('traj')" title="双击或点击右上角放大进入大窗模式">
           <canvas id="trajCanvas"></canvas>
           <canvas id="drawOverlay"></canvas>
+          <div id="drawHud" class="draw-hud"></div>
           <div class="map-hint">滚轮缩放 · 拖动平移 · 双击放大查看</div>
         </div>
         <!-- 隐藏的完整自动驾驶控制栏 (在大窗模式下展示) -->
@@ -1778,15 +1799,13 @@
         g_originalParent = wrap.parentElement;
         host.appendChild(wrap);
         wrap.classList.add('in-modal');
-        // Move autopilot / draw bars to footer
-        const autoBar = document.getElementById('autoBar');
-        const drawBar = document.getElementById('drawBar');
-        const drawing = drawBar && drawBar.style.display === 'flex';
-        footer.innerHTML = '';
-        if (autoBar) { footer.appendChild(autoBar); autoBar.style.display = drawing ? 'none' : 'flex'; }
-        if (drawBar) { footer.appendChild(drawBar); drawBar.style.display = drawing ? 'flex' : 'none'; }
-        footer.style.display = 'flex';
+        /* 底栏里只清掉上一次留下的说明文字，两个工具条是活节点，不能一起 innerHTML 掉 */
+        Array.from(footer.children).forEach(el => {
+          if (el.id !== 'autoBar' && el.id !== 'drawBar') footer.removeChild(el);
+        });
         modal.style.display = 'flex';
+        /* 工具条搬进底栏（画线中就显示绘制条，否则显示自动驾驶条） */
+        routePlaceBars(drawState.on);
         setTimeout(() => { if (typeof trajResize === 'function') trajResize(); }, 60);
       } else if (type === 'scope') {
         icon.textContent = '📈';
@@ -1818,25 +1837,8 @@
           } else {
             g_originalParent.appendChild(wrap);
           }
-          // Move autoBar / drawBar back
-          const autoBar = document.getElementById('autoBar');
-          const drawBar = document.getElementById('drawBar');
-          if (autoBar) {
-            autoBar.style.display = 'none';
-            if (compactStats) {
-              g_originalParent.insertBefore(autoBar, compactStats);
-            } else {
-              g_originalParent.appendChild(autoBar);
-            }
-          }
-          if (drawBar) {
-            drawBar.style.display = 'none';
-            if (compactStats) {
-              g_originalParent.insertBefore(drawBar, compactStats);
-            } else {
-              g_originalParent.appendChild(drawBar);
-            }
-          }
+          /* 工具条跟着地图一起回家（放回地图下面的面板里，默认收起） */
+          routePlaceBars(false);
         }
         setTimeout(() => { if (typeof trajResize === 'function') trajResize(); }, 60);
       } else if (g_enlargedType === 'scope') {
@@ -2739,6 +2741,7 @@
      *   短程（十几米内）够玩，做比赛定位要靠场地标记或视觉纠正。
      * ══════════════════════════════════════════════════════════════════ */
     const TRAJ_MAX_PTS = 30000;      /* 20Hz 下约 25 分钟，超出丢最早一半 */
+    const WEB_BUILD = '2026-11-05 画布坐标版';   /* 启动时打进日志，便于确认浏览器跑的是哪一版 */
     const TRAJ_YAW_SIGN = 1.0;       /* 右转时轨迹往右弯；若整体镜像，改成 -1 */
     const traj = {
       pts: [{ x: 0, y: 0, v: 0, yaw: 0, seg: 0, t: 0 }],
@@ -2753,45 +2756,74 @@
       panX: 0, panY: 0,
       zoomMul: 1,
       autoFit: true,
+      freeze: false,                 /* 绘制期间锁死视图：自动缩放/重定心会让刚画的线整体漂移 */
       recording: true,
       statT: 0
     };
     const trajCanvas = document.getElementById('trajCanvas');
     const trajCtx = trajCanvas.getContext('2d');
+    /* 手绘覆盖层在这里一起取：trajResize 早期就要同步它的位图尺寸 */
+    const drawOverlay = document.getElementById('drawOverlay');
+    const drawCtx = drawOverlay ? drawOverlay.getContext('2d') : null;
+    /* 画布逻辑尺寸一律以 canvas **自己的** getBoundingClientRect() 为准。
+     * 以前量的是父元素 mapWrap：工具条收放、进出大窗、滚动条出现都会让两者差几个像素到
+     * 十几像素，量出来的 vw/vh 和实际显示盒不是同一个矩形，屏幕坐标换算就会整体平移
+     * ——表现为"在原点画，线却落在右下角"。现在输入换算和绘制渲染共用同一个矩形，天然对齐。 */
+    function trajBox() {
+      const r = trajCanvas.getBoundingClientRect();
+      let w = r.width, h = r.height;
+      if (!(w >= 2) || !(h >= 2)) {
+        /* 刚搬进/搬出大窗、display:none 期间拿不到 rect，退回布局盒 */
+        w = trajCanvas.clientWidth || trajCanvas.parentElement.clientWidth || 1;
+        h = trajCanvas.clientHeight || trajCanvas.parentElement.clientHeight || 1;
+      }
+      return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+    }
     function trajResize() {
       const dpr = window.devicePixelRatio || 1;
-      const w = trajCanvas.parentElement.clientWidth || 1;
-      const h = trajCanvas.parentElement.clientHeight || 1;
-      trajCanvas.width = Math.max(1, Math.round(w * dpr));
-      trajCanvas.height = Math.max(1, Math.round(h * dpr));
+      const box = trajBox();
+      const w = box.w, h = box.h;
+      const bw = Math.max(1, Math.round(w * dpr));
+      const bh = Math.max(1, Math.round(h * dpr));
+      /* 只在尺寸真的变了时改 width/height：改一次就等于清空画布并重置 ctx 状态 */
+      if (trajCanvas.width !== bw || trajCanvas.height !== bh) {
+        trajCanvas.width = bw;
+        trajCanvas.height = bh;
+      }
       trajCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       traj.vw = w;
       traj.vh = h;
+      if (typeof drawOverlayResize === 'function') drawOverlayResize();
     }
     /* 画布尺寸与缓存不一致时立刻重新量：
      * 绘制工具条出现/消失、进出大窗、页面布局变化都会让地图变矮，
      * 若仍用旧的 vw/vh 去换算，线会越往边缘越偏（曾经差 10%+）。 */
     function trajSyncSize() {
-      const cw = trajCanvas.clientWidth || 1;
-      const ch = trajCanvas.clientHeight || 1;
-      if (Math.abs(cw - traj.vw) > 0.5 || Math.abs(ch - traj.vh) > 0.5) {
+      const box = trajBox();
+      if (box.w !== traj.vw || box.h !== traj.vh) {
         trajResize();
         return true;
       }
       return false;
     }
-    /* 屏幕坐标 → 世界坐标：以画布自身 rect 为准，顺带消除任何 CSS 缩放误差 */
-    function trajScreenToWorld(clientX, clientY) {
+    /* 屏幕坐标 → 画布本地像素（= 渲染时用的那套坐标） */
+    function trajEventLocal(clientX, clientY) {
       trajSyncSize();
       const r = trajCanvas.getBoundingClientRect();
       const sx = r.width ? traj.vw / r.width : 1;
       const sy = r.height ? traj.vh / r.height : 1;
-      const px = (clientX - r.left) * sx;
-      const py = (clientY - r.top) * sy;
+      return { px: (clientX - r.left) * sx, py: (clientY - r.top) * sy };
+    }
+    /* 画布本地像素 → 世界坐标（与 trajSX/trajSY 严格互逆） */
+    function trajLocalToWorld(px, py) {
       return {
         x: (px - traj.vw / 2 - traj.panX) / trajK() + traj.cx,
         y: traj.cy - (py - traj.vh / 2 - traj.panY) / trajK()
       };
+    }
+    function trajScreenToWorld(clientX, clientY) {
+      const p = trajEventLocal(clientX, clientY);
+      return trajLocalToWorld(p.px, p.py);
     }
     function trajRebuildBounds() {
       traj.minX = traj.maxX = traj.minY = traj.maxY = 0;
@@ -2862,7 +2894,9 @@
      * 否则刚开机只有 1mm 位移时会被放大到看不见网格）。 */
     function trajUpdateView() {
       const pad = 36;
-      if (traj.autoFit) {
+      /* freeze：绘制中无论谁把 autoFit 打开（双击/自适应按钮/清空里程），都不许动视图。
+       * 视图一动，之前落笔的世界坐标就会被换算到别处，看起来就是"画在原点、线跑到右下角"。 */
+      if (traj.autoFit && !traj.freeze) {
         const dx = Math.max(traj.maxX - traj.minX, 150);
         const dy = Math.max(traj.maxY - traj.minY, 150);
         const s = Math.min((traj.vw - pad * 2) / dx, (traj.vh - pad * 2) / dy);
@@ -3067,10 +3101,23 @@
     (function trajInit() {
       trajResize();
       trajReset(false);
+      appendLog('SYS', `前端构建 ${WEB_BUILD} · 轨迹画布 ${traj.vw}×${traj.vh} @${(window.devicePixelRatio || 1)}x`);
       window.addEventListener('resize', trajResize);
+      /* 画布盒子任何变化（工具条收放、进出大窗、窗口/缩放变化）都立刻重新量，
+       * 不再依赖某个 setTimeout(60) 恰好赶在布局之后。 */
+      if (window.ResizeObserver) {
+        try {
+          new ResizeObserver(() => {
+            trajSyncSize();
+            if (typeof drawState !== 'undefined' && drawState.on) drawOverlayRender();
+          }).observe(trajCanvas);
+        } catch (err) { /* 老浏览器没有就算了，还有每帧的 trajSyncSize 兜底 */ }
+      }
       const wrap = document.getElementById('mapWrap');
       wrap.addEventListener('wheel', (e) => {
         e.preventDefault();
+        /* 画线时锁住视图：缩放会让已经落笔的线和鼠标错位 */
+        if (typeof drawState !== 'undefined' && drawState.on) return;
         if (traj.autoFit) {
           traj.autoFit = false;
           document.getElementById('trajAuto').classList.remove('on');
@@ -3100,6 +3147,8 @@
       wrap.addEventListener('pointerup', endDrag);
       wrap.addEventListener('pointercancel', endDrag);
       wrap.addEventListener('dblclick', () => {
+        /* 绘制中双击会把视图重新自动缩放，画好的线跟着跑，直接忽略 */
+        if (typeof drawState !== 'undefined' && drawState.on) return;
         traj.autoFit = true;
         traj.panX = traj.panY = 0;
         traj.zoomMul = 1;
@@ -3605,21 +3654,60 @@
 
     /* ══════════════════════════════════════════════════════════════════
      * 手绘路线（替代原来的「跑记忆」）
-     * 在轨迹图上按住拖动即可画线，坐标直接存世界坐标（mm），
-     * 所以中途缩放/平移不会把线画歪。画完点「开始循迹」让车按线走。
+     * 在轨迹图上按住拖动即可画线。画的时候按屏幕像素落笔（所见即所得），
+     * 松手才定格成世界坐标（mm），所以中途缩放/平移不会把线画歪。
+     * 画完点「开始循迹」让车按线走。
      * ══════════════════════════════════════════════════════════════════ */
-    const drawState = { on: false, strokes: [], cur: null, dragging: false, lastPx: 0, lastPy: 0 };
-    const drawOverlay = document.getElementById('drawOverlay');
-    const drawCtx = drawOverlay ? drawOverlay.getContext('2d') : null;
+    /* cur 里存的是「画布像素」（鼠标在屏幕上指的位置），松手那一刻才换算成世界坐标。
+     * 这样画的过程中视图怎么变（工具条收放、进出大窗、窗口缩放），线始终黏在鼠标下，
+     * 不会出现"手在原点、线跑到右下角"这种对不上的情况。 */
+    const drawState = { on: false, strokes: [], cur: null, dragging: false, lastPx: 0, lastPy: 0, errPx: 0 };
 
     function drawOverlayResize() {
       if (!drawOverlay) return;
       const dpr = window.devicePixelRatio || 1;
       const w = traj.vw, h = traj.vh;
-      if (drawOverlay.width === Math.round(w * dpr) && drawOverlay.height === Math.round(h * dpr)) return;
-      drawOverlay.width = Math.max(1, Math.round(w * dpr));
-      drawOverlay.height = Math.max(1, Math.round(h * dpr));
+      const bw = Math.max(1, Math.round(w * dpr));
+      const bh = Math.max(1, Math.round(h * dpr));
+      if (drawOverlay.width === bw && drawOverlay.height === bh) return;
+      drawOverlay.width = bw;
+      drawOverlay.height = bh;
       drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    /* 调试读数：绘制时显示画布尺寸/比例/原点，出问题一眼就能看出是哪一路坐标错了 */
+    let drawHudT = 0;
+    function drawHudUpdate(force) {
+      const el = document.getElementById('drawHud');
+      if (!el) return;
+      const now = performance.now();
+      if (!force && now - drawHudT < 150) return;
+      drawHudT = now;
+      const ox = trajSX(0), oy = trajSY(0);
+      /* 覆盖层如果没正好压在画布上，线就会整体偏移——这里直接量出来 */
+      let offTxt = '';
+      if (drawOverlay) {
+        const cr = trajCanvas.getBoundingClientRect(), or_ = drawOverlay.getBoundingClientRect();
+        const dx = or_.left - cr.left, dy = or_.top - cr.top;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) offTxt = ` · 覆盖层偏移 ${dx.toFixed(0)},${dy.toFixed(0)}`;
+      }
+      el.textContent = `画布 ${traj.vw}×${traj.vh} · DPR ${(window.devicePixelRatio || 1).toFixed(2)}`
+        + ` · ${trajK().toFixed(3)} px/mm · 原点 (${ox.toFixed(0)}, ${oy.toFixed(0)})`
+        + offTxt
+        + (drawState.errPx >= 0.05 ? ` · 自检偏差 ${drawState.errPx.toFixed(1)}px` : '');
+    }
+
+    /* 进入绘制模式先自检：屏幕像素 → 世界 → 屏幕，绕一圈看偏差。
+     * 正常应当 < 0.1px；若屏幕坐标和画布尺寸不同步，这里会立刻报出来。 */
+    function drawSelfCheck() {
+      const pts = [[0, 0], [traj.vw / 2, traj.vh / 2], [traj.vw - 1, traj.vh - 1], [traj.vw * 0.2, traj.vh * 0.8]];
+      let worst = 0;
+      for (const p of pts) {
+        const w = trajLocalToWorld(p[0], p[1]);
+        worst = Math.max(worst, Math.hypot(trajSX(w.x) - p[0], trajSY(w.y) - p[1]));
+      }
+      drawState.errPx = worst;
+      return worst;
     }
 
     function drawOverlayRender() {
@@ -3634,15 +3722,23 @@
       c.lineCap = 'round';
       c.shadowColor = 'rgba(255, 179, 0, 0.5)';
       c.shadowBlur = 6;
-      const all = drawState.strokes.concat(drawState.cur ? [drawState.cur] : []);
-      for (const st of all) {
+      /* 已落笔的笔画存世界坐标，跟着地图一起缩放平移 */
+      for (const st of drawState.strokes) {
         if (st.length < 2) continue;
         c.beginPath();
         c.moveTo(trajSX(st[0].x), trajSY(st[0].y));
         for (let i = 1; i < st.length; i++) c.lineTo(trajSX(st[i].x), trajSY(st[i].y));
         c.stroke();
       }
+      /* 正在画的这一笔是纯像素，鼠标指哪画哪 */
+      if (drawState.cur && drawState.cur.length > 1) {
+        c.beginPath();
+        c.moveTo(drawState.cur[0].px, drawState.cur[0].py);
+        for (let i = 1; i < drawState.cur.length; i++) c.lineTo(drawState.cur[i].px, drawState.cur[i].py);
+        c.stroke();
+      }
       c.restore();
+      drawHudUpdate(false);
     }
 
     function drawInfo() {
@@ -3651,29 +3747,64 @@
       if (el) el.innerText = `${drawState.strokes.length} 笔 / ${n} 点`;
     }
 
+    /* 工具条往哪放：大窗开着就进底栏，否则回地图下面的面板。
+     * 以前从大窗里点「绘制路线」，绘制条留在被大窗挡住的后面、底栏反而变空，
+     * 地图高度还会跳一下——顺手一起修掉，布局和坐标都不再抖。 */
+    function routePlaceBars(on) {
+      const bar = document.getElementById('drawBar');
+      const abar = document.getElementById('autoBar');
+      const wrap = document.getElementById('mapWrap');
+      if (!wrap) return;
+      const host = wrap.parentElement;
+      const inModal = !!host && host.id === 'modalHost';
+      const box = inModal ? document.getElementById('enlargeFooter') : host;
+      if (!box) return;
+      const anchor = inModal ? null : box.querySelector('.map-stats-compact');
+      for (const el of [abar, bar]) {
+        if (!el) continue;
+        if (el.parentElement !== box) {
+          if (anchor) box.insertBefore(el, anchor); else box.appendChild(el);
+        }
+      }
+      if (inModal) {
+        if (abar) abar.style.display = on ? 'none' : 'flex';
+        if (bar) bar.style.display = on ? 'flex' : 'none';
+        box.style.display = 'flex';
+      } else {
+        if (abar) abar.style.display = 'none';
+        if (bar) bar.style.display = on ? 'flex' : 'none';
+      }
+      /* 底栏有内容了地图高度就变了，立刻重新量一次 */
+      trajSyncSize();
+    }
+
     function routeDrawToggle(force) {
       const on = (force === undefined) ? !drawState.on : !!force;
       /* 画线需要大画布：从工具栏点进来时先展开大窗 */
       if (on && g_enlargedType !== 'traj') openEnlargeModal('traj');
       drawState.on = on;
+      traj.freeze = on;
       drawState.strokes = [];
       drawState.cur = null;
       drawState.dragging = false;
-      const bar = document.getElementById('drawBar');
-      const abar = document.getElementById('autoBar');
       const wrap = document.getElementById('mapWrap');
-      if (bar) bar.style.display = on ? 'flex' : 'none';
-      if (abar) abar.style.display = on ? 'none' : 'flex';
+      routePlaceBars(on);
       if (wrap) wrap.classList.toggle('drawing', on);
       if (drawOverlay) drawOverlay.classList.toggle('on', on);
       if (on) {
         traj.autoFit = false;
         /* 工具条显隐会改变地图高度，等一帧再量，避免用旧尺寸换算 */
-        requestAnimationFrame(() => { trajSyncSize(); drawOverlayRender(); });
+        requestAnimationFrame(() => {
+          trajSyncSize();
+          const err = drawSelfCheck();
+          drawOverlayRender();
+          drawHudUpdate(true);
+          appendLog('AUTO', `进入绘制模式：画布 ${traj.vw}×${traj.vh}，坐标自检偏差 ${err.toFixed(1)}px`);
+          if (err > 1) appendLog('AUTO', `⚠ 屏幕与画布坐标不同步（偏差 ${err.toFixed(0)}px），请把这条读数截图反馈`);
+        });
         const btn = document.getElementById('trajAuto');
         if (btn) btn.classList.remove('on');
         drawInfo();
-        appendLog('AUTO', '进入绘制模式：在地图上按住拖动画线，画完点「开始循迹」');
         setAutoState('绘制中');
       } else {
         traj.autoFit = true;
@@ -3714,7 +3845,7 @@
       autoStart('replay', pts);
     }
 
-    /* 绘制模式下的鼠标/触摸捕获：存世界坐标，缩放平移都不会画歪 */
+    /* 绘制模式下的鼠标/触摸捕获：画的过程中只记像素，松手才换算成世界坐标 */
     (function bindDrawPointer() {
       const wrap = document.getElementById('mapWrap');
       if (!wrap) return;
@@ -3722,29 +3853,45 @@
         if (!drawState.on) return;
         e.preventDefault();
         e.stopPropagation();
-        const wpt = trajScreenToWorld(e.clientX, e.clientY);
-        const r = trajCanvas.getBoundingClientRect();
-        drawState.cur = [{ x: wpt.x, y: wpt.y }];
+        const p = trajEventLocal(e.clientX, e.clientY);
+        drawState.cur = [{ px: p.px, py: p.py }];
         drawState.dragging = true;
-        drawState.lastPx = e.clientX - r.left;
-        drawState.lastPy = e.clientY - r.top;
+        drawState.lastPx = p.px;
+        drawState.lastPy = p.py;
         try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
       }, true);
       wrap.addEventListener('pointermove', (e) => {
         if (!drawState.on || !drawState.dragging) return;
-        const r = trajCanvas.getBoundingClientRect();
-        const px = e.clientX - r.left, py = e.clientY - r.top;
-        if (Math.hypot(px - drawState.lastPx, py - drawState.lastPy) < 4) return;
-        drawState.lastPx = px; drawState.lastPy = py;
-        const wpt = trajScreenToWorld(e.clientX, e.clientY);
-        if (drawState.cur) drawState.cur.push({ x: wpt.x, y: wpt.y });
+        const p = trajEventLocal(e.clientX, e.clientY);
+        if (Math.hypot(p.px - drawState.lastPx, p.py - drawState.lastPy) < 4) return;
+        drawState.lastPx = p.px; drawState.lastPy = p.py;
+        if (drawState.cur) drawState.cur.push({ px: p.px, py: p.py });
       }, true);
-      const finish = (e) => {
+      const finish = () => {
         if (!drawState.on || !drawState.dragging) return;
         drawState.dragging = false;
-        if (drawState.cur && drawState.cur.length > 1) drawState.strokes.push(drawState.cur);
+        if (drawState.cur && drawState.cur.length > 1) {
+          /* 松手这一刻定格：用当前视图把像素一次性换算成世界坐标 */
+          trajSyncSize();
+          const stroke = drawState.cur.map(p => {
+            const w = trajLocalToWorld(p.px, p.py);
+            return { x: w.x, y: w.y };
+          });
+          /* 落笔自检：换算回屏幕后应当还在原来那几个像素上 */
+          let worst = 0;
+          for (let i = 0; i < stroke.length; i++) {
+            worst = Math.max(worst, Math.hypot(trajSX(stroke[i].x) - drawState.cur[i].px,
+                                               trajSY(stroke[i].y) - drawState.cur[i].py));
+          }
+          drawState.errPx = Math.max(drawState.errPx, worst);
+          drawState.strokes.push(stroke);
+          if (worst > 2) {
+            appendLog('AUTO', `⚠ 落笔偏差 ${worst.toFixed(1)}px（画布 ${traj.vw}×${traj.vh}），请截图反馈这行读数`);
+          }
+        }
         drawState.cur = null;
         drawInfo();
+        drawHudUpdate(true);
       };
       wrap.addEventListener('pointerup', finish, true);
       wrap.addEventListener('pointercancel', finish, true);
