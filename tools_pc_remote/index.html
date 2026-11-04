@@ -12384,7 +12384,7 @@
 
 
 
-      writeSerial('!SET:KP=1.2#');
+      writeSerial('!SET:KP=4.2#');
 
 
 
@@ -12392,7 +12392,7 @@
 
 
 
-      setTimeout(() => writeSerial('!SET:KD=1.8#'), 50);
+      setTimeout(() => writeSerial('!SET:KD=0.5#'), 50);
 
 
 
@@ -12400,7 +12400,7 @@
 
 
 
-      appendLog('PID', '下发循线参数: Kp=1.2, Kd=1.8');
+      appendLog('PID', '下发循线参数: Kp=4.2, Kd=0.5 (抑制蛇形震荡最佳调谐值)');
 
 
 

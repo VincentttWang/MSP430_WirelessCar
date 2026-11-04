@@ -2,7 +2,7 @@
 
 #include "chassis.h"
 #include "kinematics/kinematics.h"
-
+#include <math.h>
 #include <stddef.h>
 
 static const float s_sensor_position[LINE_FOLLOW_SENSOR_COUNT] = {
@@ -17,6 +17,7 @@ static LINE_TRACKING_CONFIG s_line_tracking_config;
 static LINE_TRACKING_OUTPUT s_line_tracking_output;
 static PID_CONTROLLER s_line_tracking_pid;
 static bool s_line_tracking_initialized = false;
+static float s_filtered_error = 0.0f;
 
 static LINE_TRACKING_CONFIG LineTracking_DefaultConfig(void){
     LINE_TRACKING_CONFIG config = {
@@ -25,10 +26,10 @@ static LINE_TRACKING_CONFIG LineTracking_DefaultConfig(void){
         .output_limit = LINE_TRACKING_DEFAULT_OUTPUT_LIMIT,
         .differential_limit = LINE_TRACKING_DEFAULT_DIFFERENTIAL_LIMIT,
         .pid_config = {
-            .kp = 1.2f,
+            .kp = 4.2f,
             .ki = 0.0f,
-            .kd = 1.8f,
-            .integral_limit = 500.0f,
+            .kd = 0.5f,
+            .integral_limit = 50.0f,
             .output_limit = LINE_TRACKING_DEFAULT_CORRECTION_LIMIT,
             .mode = PID_MODE_POSITION,
         },
@@ -57,6 +58,7 @@ void LineTracking_Init(const LINE_TRACKING_CONFIG *config){
 
 void LineTracking_Reset(void){
     PID_Reset(&s_line_tracking_pid);
+    s_filtered_error = 0.0f;
 
     s_line_tracking_output.error = 0.0f;
     s_line_tracking_output.correction = 0.0f;
@@ -149,7 +151,17 @@ BSP_STATUS LineTracking_Compute(const LINE_FOLLOW_SENSOR_STATE *sensor,
 
     /* 横向偏差：负数偏左，正数偏右 */
     float average_position = position_sum / (float)active_count;
-    out->error = average_position * s_line_tracking_config.sensor_position_scale;
+
+    /* 死区抑制（Deadband）：中心通道 3与4 (对应 -0.5 与 +0.5) 居中对齐时偏差 < 0.20 直接归零，彻底根除直行持续蛇形摆头 */
+    float target_error = 0.0f;
+    if (fabsf(average_position) >= 0.20f) {
+        target_error = average_position * s_line_tracking_config.sensor_position_scale;
+    }
+
+    /* 一阶低通平滑滤波：消除 8 路离散探头状态切换时的阶跃冲击，防止微分项产生极端极限环震荡 */
+    s_filtered_error = 0.70f * s_filtered_error + 0.30f * target_error;
+    out->error = s_filtered_error;
+
     out->correction = PID_Update(&s_line_tracking_pid, out->error, 0.0f, dt_s);
 
     if (s_line_tracking_config.differential_limit > 0.0f){

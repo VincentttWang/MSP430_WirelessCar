@@ -847,18 +847,22 @@ static void AppRemoteCar_ParsePacketCommand(const char *pkt, uint8_t src){
     }
 
     /* 识别 !SET:KP=xx# 和 !SET:KD=xx# 巡线 PID 参数在线调节 */
+    static float s_line_kp = 4.2f;
+    static float s_line_kd = 0.5f;
     if (strncmp(pkt, "!SET:KP=", 8) == 0){
-        float kp = 1.2f;
+        float kp = 4.2f;
         if (sscanf(pkt + 8, "%f", &kp) == 1){
-            LineTracking_SetPid(kp, 0.0f, 1.8f);
+            s_line_kp = kp;
+            LineTracking_SetPid(s_line_kp, 0.0f, s_line_kd);
             s_last_cmd_ms = BSP_Time_GetMs();
         }
         return;
     }
     if (strncmp(pkt, "!SET:KD=", 8) == 0){
-        float kd = 1.8f;
+        float kd = 0.5f;
         if (sscanf(pkt + 8, "%f", &kd) == 1){
-            LineTracking_SetPid(1.2f, 0.0f, kd);
+            s_line_kd = kd;
+            LineTracking_SetPid(s_line_kp, 0.0f, s_line_kd);
             s_last_cmd_ms = BSP_Time_GetMs();
         }
         return;
