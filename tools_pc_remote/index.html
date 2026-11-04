@@ -2768,6 +2768,31 @@
       traj.vw = w;
       traj.vh = h;
     }
+    /* 画布尺寸与缓存不一致时立刻重新量：
+     * 绘制工具条出现/消失、进出大窗、页面布局变化都会让地图变矮，
+     * 若仍用旧的 vw/vh 去换算，线会越往边缘越偏（曾经差 10%+）。 */
+    function trajSyncSize() {
+      const cw = trajCanvas.clientWidth || 1;
+      const ch = trajCanvas.clientHeight || 1;
+      if (Math.abs(cw - traj.vw) > 0.5 || Math.abs(ch - traj.vh) > 0.5) {
+        trajResize();
+        return true;
+      }
+      return false;
+    }
+    /* 屏幕坐标 → 世界坐标：以画布自身 rect 为准，顺带消除任何 CSS 缩放误差 */
+    function trajScreenToWorld(clientX, clientY) {
+      trajSyncSize();
+      const r = trajCanvas.getBoundingClientRect();
+      const sx = r.width ? traj.vw / r.width : 1;
+      const sy = r.height ? traj.vh / r.height : 1;
+      const px = (clientX - r.left) * sx;
+      const py = (clientY - r.top) * sy;
+      return {
+        x: (px - traj.vw / 2 - traj.panX) / trajK() + traj.cx,
+        y: traj.cy - (py - traj.vh / 2 - traj.panY) / trajK()
+      };
+    }
     function trajRebuildBounds() {
       traj.minX = traj.maxX = traj.minY = traj.maxY = 0;
       for (const p of traj.pts) {
@@ -2859,6 +2884,7 @@
       return 100000;
     }
     function trajRender() {
+      trajSyncSize();
       const w = traj.vw, h = traj.vh, k = trajK();
       if (w < 2 || h < 2) return;
       trajCtx.fillStyle = '#05080e';
@@ -3642,6 +3668,8 @@
       if (drawOverlay) drawOverlay.classList.toggle('on', on);
       if (on) {
         traj.autoFit = false;
+        /* 工具条显隐会改变地图高度，等一帧再量，避免用旧尺寸换算 */
+        requestAnimationFrame(() => { trajSyncSize(); drawOverlayRender(); });
         const btn = document.getElementById('trajAuto');
         if (btn) btn.classList.remove('on');
         drawInfo();
@@ -3694,24 +3722,22 @@
         if (!drawState.on) return;
         e.preventDefault();
         e.stopPropagation();
-        const r = wrap.getBoundingClientRect();
-        const px = e.clientX - r.left, py = e.clientY - r.top;
-        const wx = (px - traj.vw / 2 - traj.panX) / trajK() + traj.cx;
-        const wy = traj.cy - (py - traj.vh / 2 - traj.panY) / trajK();
-        drawState.cur = [{ x: wx, y: wy }];
+        const wpt = trajScreenToWorld(e.clientX, e.clientY);
+        const r = trajCanvas.getBoundingClientRect();
+        drawState.cur = [{ x: wpt.x, y: wpt.y }];
         drawState.dragging = true;
-        drawState.lastPx = px; drawState.lastPy = py;
+        drawState.lastPx = e.clientX - r.left;
+        drawState.lastPy = e.clientY - r.top;
         try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
       }, true);
       wrap.addEventListener('pointermove', (e) => {
         if (!drawState.on || !drawState.dragging) return;
-        const r = wrap.getBoundingClientRect();
+        const r = trajCanvas.getBoundingClientRect();
         const px = e.clientX - r.left, py = e.clientY - r.top;
         if (Math.hypot(px - drawState.lastPx, py - drawState.lastPy) < 4) return;
         drawState.lastPx = px; drawState.lastPy = py;
-        const wx = (px - traj.vw / 2 - traj.panX) / trajK() + traj.cx;
-        const wy = traj.cy - (py - traj.vh / 2 - traj.panY) / trajK();
-        if (drawState.cur) drawState.cur.push({ x: wx, y: wy });
+        const wpt = trajScreenToWorld(e.clientX, e.clientY);
+        if (drawState.cur) drawState.cur.push({ x: wpt.x, y: wpt.y });
       }, true);
       const finish = (e) => {
         if (!drawState.on || !drawState.dragging) return;

@@ -169,6 +169,23 @@ python "NUEDC_2026/[Demo] MSPM0_Car_v5/tools/gen_oled_cn_font.py"
 用微软雅黑 Bold 渲染 24px（标题）/ 16px（提示）后二值化。加字就改脚本里的字表重跑。
 源码里不出现 UTF-8 汉字字面量，避免 Keil 编码问题。
 
+### 3.4 画线和鼠标位置对不上
+
+轨迹图是"世界坐标 ↔ 屏幕坐标"双向前端换算，两边必须用**同一套尺寸**。
+历史上出过这个问题：`traj.vw/vh` 只在进出大窗和窗口 resize 时更新，
+而绘制工具条显隐会改变地图高度 → 缓存比实际大 → 线比鼠标"缩"了一圈，越往边缘越偏。
+
+现在的做法（`trajScreenToWorld()`）：
+
+```js
+trajSyncSize();                                  // 画布 CSS 尺寸和缓存不一致就重新量
+const r = trajCanvas.getBoundingClientRect();    // 用画布自己的 rect，不用外层容器
+const px = (clientX - r.left) * (traj.vw / r.width);
+```
+
+自检方法：画一笔后执行 `trajSX(drawState.strokes[0][0].x)`，
+应等于按下时指针相对画布的 x（误差 <1px）。
+
 ---
 
 ## 4. 无线链路与遥测
