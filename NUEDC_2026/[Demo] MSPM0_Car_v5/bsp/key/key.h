@@ -37,6 +37,23 @@ extern "C" {
 #define KEY_DOWN_ACTIVE_LOW 1U
 #endif
 
+/* 天猛星 UP 键：接 PA14（SysConfig 未配置该脚，由 key.c 的 Key_Init 现场初始化） */
+#ifndef KEY_UP_PORT
+#define KEY_UP_PORT (GPIOA)
+#endif
+
+#ifndef KEY_UP_PIN
+#define KEY_UP_PIN (DL_GPIO_PIN_14)
+#endif
+
+#ifndef KEY_UP_IOMUX
+#define KEY_UP_IOMUX (IOMUX_PINCM36)
+#endif
+
+#ifndef KEY_UP_ACTIVE_LOW
+#define KEY_UP_ACTIVE_LOW 1U
+#endif
+
 #ifndef KEY_DEBOUNCE_MS
 #define KEY_DEBOUNCE_MS 20U
 #endif
@@ -59,6 +76,7 @@ extern "C" {
 typedef enum {
     KEY_ID_1 = 0,
     KEY_ID_DOWN,
+    KEY_ID_UP,
     KEY_ID_MAX
 } KEY_ID;
 
@@ -134,6 +152,10 @@ void Key_ClearAllEvents(void);
 #define Key_Down_IsShortPress()   Key_IsShortPress(KEY_ID_DOWN)
 #define Key_Down_IsShortRelease() Key_IsShortRelease(KEY_ID_DOWN)
 #define Key_Down_IsLongPress()    Key_IsLongPress(KEY_ID_DOWN)
+#define Key_Up_IsPressed()        Key_IsPressed(KEY_ID_UP)
+#define Key_Up_IsShortPress()     Key_IsShortPress(KEY_ID_UP)
+#define Key_Up_IsShortRelease()   Key_IsShortRelease(KEY_ID_UP)
+#define Key_Up_IsLongPress()      Key_IsLongPress(KEY_ID_UP)
 
 #ifdef __cplusplus
 }

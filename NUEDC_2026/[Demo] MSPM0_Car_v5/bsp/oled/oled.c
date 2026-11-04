@@ -5,6 +5,7 @@
 
 #include "oled.h"
 #include "oled_font.h"
+#include "oled_font_cn.h"
 #include "oled_font_arial.h"
 #include "bsp_time.h"
 #include <stdbool.h>
@@ -16,9 +17,18 @@
 #define OLED_CMD  0U
 #define OLED_DATA 1U
 #define OLED_I2C_ADDR_7BIT 0x3CU
-#define OLED_I2C_TIMEOUT   100000U
+#define OLED_I2C_TIMEOUT   20000U
+/* OLED 插拔检测周期：屏幕拔掉后 IO 悬空（模块自带的 4.7k 上拉跟着 VCC 一起没了），
+ * BUSBSY 会一直挂住；每 2s 只花一条地址字节探一次 ACK，探不到就跳过刷屏，
+ * 免得整机被几十条 OLED 事务的超时拖到遥测都发不出去。 */
+#define OLED_PRESENCE_PERIOD_MS  2000U
 
 static bool OLED_I2C_WaitIdle(void);
+static void OLED_I2C_BusRecover(void);
+static bool OLED_ProbeAck(void);
+static bool OLED_PresenceCheck(void);
+static bool s_oled_online = true;
+static uint32_t s_oled_probe_ms = 0U;
 static bool OLED_I2C_Write(const uint8_t *data, uint16_t len);
 static void OLED_Write_Bytes(uint8_t control, const uint8_t *data, uint16_t len);
 static void OLED_WR_Byte(uint8_t dat, uint8_t mode);
@@ -67,6 +77,143 @@ void OLED_ColorTurn(uint8_t i){
 //        OLED_WR_Byte(0xA0,OLED_CMD);
 //    }
 //}
+/* 只发一个地址字节看 ACK：true = 屏在线。
+ *
+ * 【判据要三条都满足】之前只看 ERROR 位是不够的：总线被拉死（BUSBSY）时
+ * START 根本发不出去，控制器既不置 BUSY 也不置 ERROR，于是"什么都不做"
+ * 被误判成"在线"，写函数继续逐条等超时 —— 整机就被拖垮了。
+ *   1) 起始前总线不能是 BUSBSY（悬空被拉低 = 屏没供电/没插）；
+ *   2) 发完 START 后 BUSY 必须真的置起过（否则等于没发出去）；
+ *   3) 收尾 BUSY 清零且无 ERROR（有 ACK）。
+ */
+static bool OLED_ProbeAck(void){
+    uint32_t timeout = OLED_I2C_TIMEOUT;
+    uint32_t status;
+
+    while (((status = DL_I2C_getControllerStatus(OLED_INST))
+            & DL_I2C_CONTROLLER_STATUS_IDLE) == 0U){
+        if (timeout-- == 0U){
+            return false;
+        }
+    }
+
+    /* 悬空/被拉死的总线：屏不在，别发，也别让上层再等 */
+    if ((status & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U){
+        return false;
+    }
+
+    DL_I2C_resetControllerTransfer(OLED_INST);
+    DL_I2C_flushControllerTXFIFO(OLED_INST);
+    DL_I2C_transmitControllerData(OLED_INST, 0x00U);
+    DL_I2C_startControllerTransfer(OLED_INST, OLED_I2C_ADDR_7BIT,
+        DL_I2C_CONTROLLER_DIRECTION_TX, 1U);
+
+    /* BUSY 必须真的置起来，否则说明 START 没发出去（例如又被 BUSBSY 挡住） */
+    timeout = 2000U;
+    while ((DL_I2C_getControllerStatus(OLED_INST) & DL_I2C_CONTROLLER_STATUS_BUSY) == 0U){
+        if (timeout-- == 0U){
+            DL_I2C_resetControllerTransfer(OLED_INST);
+            return false;
+        }
+    }
+
+    timeout = OLED_I2C_TIMEOUT;
+    while ((DL_I2C_getControllerStatus(OLED_INST) & DL_I2C_CONTROLLER_STATUS_BUSY) != 0U){
+        if (timeout-- == 0U){
+            DL_I2C_resetControllerTransfer(OLED_INST);
+            return false;
+        }
+    }
+
+    if ((DL_I2C_getControllerStatus(OLED_INST) & DL_I2C_CONTROLLER_STATUS_ERROR) != 0U){
+        DL_I2C_resetControllerTransfer(OLED_INST);
+        return false;
+    }
+    return true;
+}
+
+/* 每 2s 最多探一次；离线期间完全跳过刷屏，在线期间也顺便确认没被拔掉 */
+static bool OLED_PresenceCheck(void){
+    uint32_t now = BSP_Time_GetMs();
+
+    if ((now - s_oled_probe_ms) < OLED_PRESENCE_PERIOD_MS){
+        return s_oled_online;
+    }
+    s_oled_probe_ms = now;
+
+    if (!s_oled_online){
+        /* 离线时先把悬空总线补时钟拉回空闲，再探一次；插回去就能自动恢复 */
+        if ((DL_I2C_getControllerStatus(OLED_INST) & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U){
+            OLED_I2C_BusRecover();
+        }
+    }
+
+    bool was_online = s_oled_online;
+    s_oled_online = OLED_ProbeAck();
+
+    /* 离线 → 在线的这一拍必须补一次初始化：SSD1306 是重新上电的，
+     * 电荷泵/显示开关都还是关的，只送显存它照样黑屏。 */
+    if (!was_online && s_oled_online){
+        OLED_Init();
+    }
+    return s_oled_online;
+}
+
+/* ═══════════════ I2C1 总线恢复（OLED 把 SDA 拉死时自愈） ═══════════════
+ * 症状：I2C1 的 MSR = 0x60（BUSBSY | IDLE）——控制器自己空闲，但总线被拉低，
+ *      之后每一次 START 都发不出去，OLED 停止刷新，主循环被逐个超时拖到近乎停摆。
+ * 原因：主机在字节传输中途被复位/掉电，SSD1306 还停在"回 ACK 时拉低 SDA"的状态，
+ *      必须由主机补 9 个 SCL 时钟 + 一个手工 STOP 它才松手。
+ * 做法：临时把 SCL/SDA 从 I2C1 抢成 GPIO，用"高阻 = 释放 / 输出低 = 拉低"
+ *      模拟开漏，补完时钟后把复用功能和 HiZ 原样恢复。
+ */
+static void OLED_I2C_BusRecover(void){
+    GPIO_Regs *port = GPIO_OLED_SCL_PORT;
+    uint32_t   pins = (uint32_t)GPIO_OLED_SCL_PIN | (uint32_t)GPIO_OLED_SDA_PIN;
+
+    DL_I2C_disableController(OLED_INST);
+
+    /* 抢成 GPIO 输出；先把输出锁存设成 0，再决定是否驱动（DOE=0 即高阻释放） */
+    DL_GPIO_initDigitalOutputFeatures(GPIO_OLED_IOMUX_SCL,
+        DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_NONE,
+        DL_GPIO_DRIVE_STRENGTH_LOW, DL_GPIO_HIZ_DISABLE);
+    DL_GPIO_initDigitalOutputFeatures(GPIO_OLED_IOMUX_SDA,
+        DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_NONE,
+        DL_GPIO_DRIVE_STRENGTH_LOW, DL_GPIO_HIZ_DISABLE);
+    DL_GPIO_clearPins(port, pins);          /* DOUT = 0，等会儿驱动就是拉低 */
+
+    /* 9 个时钟：把从机卡住的那一位（含 ACK）全部推出去 */
+    for (uint8_t i = 0U; i < 9U; i++){
+        DL_GPIO_disableOutput(port, GPIO_OLED_SCL_PIN);      /* SCL 释放 → 外部上拉为高 */
+        DL_Common_delayCycles(160U);                         /* ~5us @32MHz */
+        DL_GPIO_enableOutput(port, GPIO_OLED_SCL_PIN);       /* SCL 拉低 */
+        DL_Common_delayCycles(160U);
+    }
+
+    /* 手工 STOP：SCL 高电平期间 SDA 由低变高 */
+    DL_GPIO_enableOutput(port, GPIO_OLED_SDA_PIN);
+    DL_Common_delayCycles(160U);
+    DL_GPIO_disableOutput(port, GPIO_OLED_SCL_PIN);
+    DL_Common_delayCycles(160U);
+    DL_GPIO_disableOutput(port, GPIO_OLED_SDA_PIN);
+    DL_Common_delayCycles(320U);
+
+    /* 交回 I2C1：复用功能 + HiZ（与 SysConfig 生成的配置保持一致） */
+    DL_GPIO_initPeripheralInputFunctionFeatures(GPIO_OLED_IOMUX_SDA,
+        GPIO_OLED_IOMUX_SDA_FUNC, DL_GPIO_INVERSION_DISABLE,
+        DL_GPIO_RESISTOR_NONE, DL_GPIO_HYSTERESIS_DISABLE,
+        DL_GPIO_WAKEUP_DISABLE);
+    DL_GPIO_initPeripheralInputFunctionFeatures(GPIO_OLED_IOMUX_SCL,
+        GPIO_OLED_IOMUX_SCL_FUNC, DL_GPIO_INVERSION_DISABLE,
+        DL_GPIO_RESISTOR_NONE, DL_GPIO_HYSTERESIS_DISABLE,
+        DL_GPIO_WAKEUP_DISABLE);
+    DL_GPIO_enableHiZ(GPIO_OLED_IOMUX_SDA);
+    DL_GPIO_enableHiZ(GPIO_OLED_IOMUX_SCL);
+
+    DL_I2C_resetControllerTransfer(OLED_INST);
+    DL_I2C_enableController(OLED_INST);
+}
+
 static bool OLED_I2C_WaitIdle(void){
     uint32_t timeout = OLED_I2C_TIMEOUT;
 
@@ -75,6 +222,12 @@ static bool OLED_I2C_WaitIdle(void){
             DL_I2C_resetControllerTransfer(OLED_INST);
             return false;
         }
+    }
+
+    /* 控制器空闲但 BUSBSY 还挂着 = 从机把 SDA 拉死，补时钟自愈（只在真卡死时走） */
+    if (s_oled_online &&
+        (DL_I2C_getControllerStatus(OLED_INST) & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0U){
+        OLED_I2C_BusRecover();
     }
 
     return true;
@@ -87,6 +240,11 @@ static bool OLED_I2C_Write(const uint8_t *data, uint16_t len){
 
     if (data == NULL || len == 0U){
         return true;
+    }
+
+    /* 屏不在就别发：每条事务都要吃掉一次超时，几十条下来整机都卡住 */
+    if (!OLED_PresenceCheck()){
+        return false;
     }
 
     if (!OLED_I2C_WaitIdle()){
@@ -655,29 +813,190 @@ void OLED_DrawCompassDashboard(float yaw_deg,
     }
 } 
 
-void OLED_DrawCalibrationScreen(uint8_t step, const char *status_msg)
+void OLED_DrawGrayscaleMonitor(const uint8_t analog[8], uint8_t digital_mask, bool online)
 {
     memset(s_oled_fb, 0, sizeof(s_oled_fb));
-    /* 顶部标题栏 */
-    OLED_BufDrawString8x16(8, 2, "== SENSOR CAL ==", 1);
 
-    if (step == 1) {
-        OLED_BufDrawString8x16(0, 22, "1. Put on WHITE", 1);
-        OLED_BufDrawString8x16(0, 40, "Press [DOWN] Key", 1);
-    } else if (step == 2) {
-        OLED_BufDrawString8x16(0, 22, "WHITE OK! -> 2", 1);
-        OLED_BufDrawString8x16(0, 40, "Put on BLACK...", 1);
-    } else if (step == 3) {
-        OLED_BufDrawString8x16(0, 22, "CALIB COMPLETE!", 1);
-        OLED_BufDrawString8x16(0, 40, "Saved To Sensor", 1);
+    if (!online || analog == NULL){
+        /* 离线时别画一排 0 让人误以为"全是白"，直接把结论写在屏上 */
+        OLED_BufDrawString8x16(16, 8, "NO SENSOR", 1);
+        OLED_BufDrawString6x8(20, 36, "CHECK I2C 0x4C", 1);
+        for (uint8_t page = 0; page < OLED_PAGE_COUNT; page++){
+            OLED_Set_Pos(0, page);
+            OLED_Write_ContinuousData(s_oled_fb[page], OLED_WIDTH);
+        }
+        return;
     }
 
-    if (status_msg != NULL) {
-        OLED_BufDrawString6x8(0, 56, status_msg, 1);
+    /* 2 列 × 4 格，每格 62×16px：
+     *   上 8px：通道号 + 黑白方块 + 三位数值
+     *   下 8px：模拟量条形图（与上面同一列宽，一眼对得上号）
+     * 单列塞 8 行时字号只有 6x8、行行相接，实测难读；拆两列后每格
+     * 留出 8px 的空白行，读数、看条都不费劲。 */
+    for (uint8_t i = 0U; i < 8U; i++){
+        int col = (i < 4U) ? 0 : 1;
+        int row = (int)(i % 4U);
+        int x0 = (col == 0) ? 0 : 66;
+        int y0 = row * 16;
+        uint8_t v = analog[i];
+
+        /* 通道号 1~8 */
+        OLED_BufDrawChar6x8(x0, y0, (char)('1' + i), 1);
+
+        /* 数字量指示：实心=压黑，空心=白底 */
+        int dx = x0 + 8;
+        int dy = y0 + 2;
+        if ((digital_mask & (uint8_t)(1U << i)) != 0U){
+            for (int yy = 0; yy < 4; yy++){
+                for (int xx = 0; xx < 4; xx++){
+                    OLED_BufSetPixel(dx + xx, dy + yy, 1);
+                }
+            }
+        } else {
+            for (int t = 0; t < 4; t++){
+                OLED_BufSetPixel(dx + t, dy, 1);
+                OLED_BufSetPixel(dx + t, dy + 3, 1);
+                OLED_BufSetPixel(dx, dy + t, 1);
+                OLED_BufSetPixel(dx + 3, dy + t, 1);
+            }
+        }
+
+        /* 三位数值右对齐（百位/十位为 0 时留空，不画前导零） */
+        char num[3];
+        num[0] = (v >= 100U) ? (char)('0' + v / 100U) : ' ';
+        num[1] = (v >= 10U)  ? (char)('0' + (v / 10U) % 10U) : ' ';
+        num[2] = (char)('0' + v % 10U);
+        for (uint8_t k = 0U; k < 3U; k++){
+            OLED_BufDrawChar6x8(x0 + 41 + (int)k * 6, y0, num[k], 1);
+        }
+
+        /* 条形图：整格宽 60px，6px 高，紧贴数值下方 */
+        int w = ((int)v * 60) / 255;
+        if (v > 0U && w == 0){
+            w = 1;
+        }
+        for (int yy = 0; yy < 6; yy++){
+            for (int xx = 0; xx < w; xx++){
+                OLED_BufSetPixel(x0 + xx, y0 + 9 + yy, 1);
+            }
+        }
     }
 
-    for (uint8_t page = 0; page < 8; page++){
+    /* 左右两列的分隔线，避免两格的数值看串行 */
+    for (int y = 0; y < (int)OLED_HEIGHT; y++){
+        OLED_BufSetPixel(62, y, 1);
+    }
+
+    for (uint8_t page = 0; page < OLED_PAGE_COUNT; page++){
         OLED_Set_Pos(0, page);
-        OLED_Write_ContinuousData(s_oled_fb[page], 128);
+        OLED_Write_ContinuousData(s_oled_fb[page], OLED_WIDTH);
+    }
+}
+
+/* ═══════════════ 校准向导整屏汉字提示 ═══════════════
+ * 旧版把英文标题、两行指令、6x8 小字状态全塞进 128x64，字号小、信息重复，
+ * 站远一点根本看不清。现在只留两行：
+ *   第 1 行 24px 汉字标题（循线校准 / 校准成功 / 校准失败）
+ *   第 2 行 16px 汉字提示（请放在白色上 / 请放在黑色上 / 请重试）
+ * 两行水平居中，标题上留 8px、行间 8px，视觉重心正好在屏幕中线。
+ */
+
+#define OLED_CN24_ADV  26   /* 24px 字身 24 + 2px 字距 */
+#define OLED_CN16_ADV  17   /* 16px 字身 16 + 1px 字距 */
+
+static void OLED_BufDrawCN24(int x, int y, uint8_t idx)
+{
+    if (idx >= (uint8_t)(sizeof(g_oled_font_cn24) / sizeof(g_oled_font_cn24[0]))){
+        return;
+    }
+    for (int row = 0; row < 24; row++){
+        uint32_t bits = g_oled_font_cn24[idx][row];
+        if (bits == 0U){
+            continue;
+        }
+        for (int col = 0; col < 24; col++){
+            if ((bits & (1UL << col)) != 0U){
+                OLED_BufSetPixel(x + col, y + row, 1U);
+            }
+        }
+    }
+}
+
+static void OLED_BufDrawCN16(int x, int y, uint8_t idx)
+{
+    if (idx >= (uint8_t)(sizeof(g_oled_font_cn16) / sizeof(g_oled_font_cn16[0]))){
+        return;
+    }
+    for (int row = 0; row < 16; row++){
+        uint16_t bits = g_oled_font_cn16[idx][row];
+        if (bits == 0U){
+            continue;
+        }
+        for (int col = 0; col < 16; col++){
+            if ((bits & (1U << col)) != 0U){
+                OLED_BufSetPixel(x + col, y + row, 1U);
+            }
+        }
+    }
+}
+
+static void OLED_BufDrawCNLine24(const uint8_t *ids, uint8_t n, int y)
+{
+    int x = (int)(OLED_WIDTH - ((int)n * OLED_CN24_ADV - 2)) / 2;
+    for (uint8_t i = 0U; i < n; i++){
+        OLED_BufDrawCN24(x, y, ids[i]);
+        x += OLED_CN24_ADV;
+    }
+}
+
+static void OLED_BufDrawCNLine16(const uint8_t *ids, uint8_t n, int y)
+{
+    int x = (int)(OLED_WIDTH - ((int)n * OLED_CN16_ADV - 1)) / 2;
+    for (uint8_t i = 0U; i < n; i++){
+        OLED_BufDrawCN16(x, y, ids[i]);
+        x += OLED_CN16_ADV;
+    }
+}
+
+void OLED_DrawCalibrationScreen(uint8_t step)
+{
+    /* 循线校准 */
+    static const uint8_t s_title_cal[] = {CN24_IDX_XUN, CN24_IDX_XIAN,
+                                          CN24_IDX_JIAO, CN24_IDX_ZHUN};
+    /* 校准成功 */
+    static const uint8_t s_title_ok[]  = {CN24_IDX_JIAO, CN24_IDX_ZHUN,
+                                          CN24_IDX_CHENG, CN24_IDX_GONG};
+    /* 校准失败 */
+    static const uint8_t s_title_err[] = {CN24_IDX_JIAO, CN24_IDX_ZHUN,
+                                          CN24_IDX_SHI, CN24_IDX_BAI};
+    /* 请放在白色上 */
+    static const uint8_t s_body_white[] = {CN16_IDX_QING, CN16_IDX_FANG, CN16_IDX_ZAI,
+                                           CN16_IDX_BAI, CN16_IDX_SE, CN16_IDX_SHANG};
+    /* 请放在黑色上 */
+    static const uint8_t s_body_black[] = {CN16_IDX_QING, CN16_IDX_FANG, CN16_IDX_ZAI,
+                                           CN16_IDX_HEI, CN16_IDX_SE, CN16_IDX_SHANG};
+    /* 请重试 */
+    static const uint8_t s_body_retry[] = {CN16_IDX_QING, CN16_IDX_ZHONG, CN16_IDX_SHI3};
+
+    memset(s_oled_fb, 0, sizeof(s_oled_fb));
+
+    if (step == OLED_CALIB_STEP_OK){
+        /* 成功只有一句，单独居中，别让空行把画面劈成两半 */
+        OLED_BufDrawCNLine24(s_title_ok, 4U, 20);
+    } else if (step == OLED_CALIB_STEP_ERR){
+        OLED_BufDrawCNLine24(s_title_err, 4U, 8);
+        OLED_BufDrawCNLine16(s_body_retry, 3U, 40);
+    } else {
+        OLED_BufDrawCNLine24(s_title_cal, 4U, 8);
+        if (step == OLED_CALIB_STEP_BLACK){
+            OLED_BufDrawCNLine16(s_body_black, 6U, 40);
+        } else {
+            OLED_BufDrawCNLine16(s_body_white, 6U, 40);
+        }
+    }
+
+    for (uint8_t page = 0; page < OLED_PAGE_COUNT; page++){
+        OLED_Set_Pos(0, page);
+        OLED_Write_ContinuousData(s_oled_fb[page], OLED_WIDTH);
     }
 }

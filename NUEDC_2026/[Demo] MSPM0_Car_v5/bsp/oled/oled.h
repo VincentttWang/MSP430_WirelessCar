@@ -7,14 +7,28 @@
 #define OLED_H
 
 #include "ti_msp_dl_config.h"
+#include <stdbool.h>
 #include <stdint.h>
 
+/* 校准向导的四种整屏提示（128x64；一行 24px 汉字标题 + 一行 16px 提示） */
+#define OLED_CALIB_STEP_WHITE  1U   /* 循线校准 / 请放在白色上 */
+#define OLED_CALIB_STEP_BLACK  2U   /* 循线校准 / 请放在黑色上 */
+#define OLED_CALIB_STEP_OK     3U   /* 校准成功 */
+#define OLED_CALIB_STEP_ERR    4U   /* 校准失败 / 请重试 */
+
 /**
- * @brief 绘制传感器校准引导界面
- * @param step 1=白底提示, 2=黑线提示, 3=完成提示
- * @param status_msg 底部辅助提示字符串
+ * @brief 绘制传感器校准引导界面（汉字整屏提示）
+ * @param step OLED_CALIB_STEP_xxx
  */
-void OLED_DrawCalibrationScreen(uint8_t step, const char *status_msg);
+void OLED_DrawCalibrationScreen(uint8_t step);
+
+/**
+ * @brief 绘制"八路灰度实时监视"整屏（UP 键切进来）
+ * @param analog      8 路模拟量，0~255
+ * @param digital_mask 数字量位图，bit0 = 探头 1，1 = 检测到黑
+ * @param online      传感器是否在线（离线时整屏提示 NO SENSOR）
+ */
+void OLED_DrawGrayscaleMonitor(const uint8_t analog[8], uint8_t digital_mask, bool online);
 
 #ifdef __cplusplus
 extern "C" {

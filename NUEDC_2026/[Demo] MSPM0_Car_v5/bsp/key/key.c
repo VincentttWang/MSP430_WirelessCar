@@ -50,6 +50,11 @@ static const KEY_HW_CONFIG s_key_hw[KEY_ID_MAX] = {
         .pin = KEY_DOWN_PIN,
         .active_low = (KEY_DOWN_ACTIVE_LOW != 0U),
     },
+    [KEY_ID_UP] = {
+        .port = KEY_UP_PORT,
+        .pin = KEY_UP_PIN,
+        .active_low = (KEY_UP_ACTIVE_LOW != 0U),
+    },
 };
 
 static KEY_STATE_CONTEXT s_key_state[KEY_ID_MAX];
@@ -73,6 +78,12 @@ static void Key_PushEvent(KEY_ID key_id, KEY_EVENT event){
 }
 
 void Key_Init(void){
+    /* UP 键 (PA14) 不在 SysConfig 的 Key 组里，这里按上拉输入现场配置，
+     * 否则引脚浮空、读出来永远是低电平，按了也没反应。 */
+    DL_GPIO_initDigitalInputFeatures(KEY_UP_IOMUX,
+        DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_UP,
+        DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
+
     for (uint8_t i = 0U; i < (uint8_t)KEY_ID_MAX; i++){
         KEY_ID key_id = (KEY_ID)i;
         KEY_LEVEL level = Key_ReadLevel(key_id);
