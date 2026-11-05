@@ -246,3 +246,69 @@ T.pts.push({x:2000, y:1995}); autoStep();   // 应触发到达
 | `UP` 键无反应 | 校准向导正在运行（UP 让位） | 先 `!CAL:EXIT#` |
 | 烧录后无反应 | Keil `-f` 后内核停在 halt | `pyocd reset -t cortex_m` |
 | 网页连不上串口 | COM 口被其他程序占用 | 关掉串口助手 / 上位机 |
+
+---
+
+## 7. 手机手柄在校园网连不上
+
+**现象**：PC 上位机正常，手机输入 `http://10.x.x.x:8080/mobile.html` 打不开。
+
+**根因**：校园网 IPv4 常是私网 `10.x` + AP 隔离 / 跨网段 ACL；同一 Wi-Fi ≠ 同一二层可达。
+另外原来的 `web_server.py` 只监听 IPv4 (`AF_INET`)，且只打印一个 `lan_ip()`，所以即使机器有全球单播 IPv6 也用不上。
+
+### 已改动（当前版本）
+
+- `web_server.py` 同时监听 `0.0.0.0:PORT` 与 `[::]:PORT`（IPv6 强制 `V6ONLY`，避免抢端口）；
+- `PORT` 可用环境变量 `MSP430_PORT` 覆盖；
+- `/api/info` 返回 `addresses[]`（IPv6 稳定 / IPv6 临时 / IPv4 / 热点 IPv4）、`preferred_url`、`hotspot`；
+  启动横幅与 PC 页面日志会把全部地址列出来，IPv6 自动带 `[]`，**检测到热点网段时自动把热点 IPv4 排第一**；
+- `mobile.html` 只用同源 `/api/telemetry`、`/api/send`，不依赖 Web Serial，所以 IPv6 / 热点 / USB 转发都能用。
+
+### 最省事：手机开热点，电脑连手机热点
+
+**可以，而且完全不用穿透**。手机此时就是网关，PC 是它下挂的客户端，两台在同一个二层广播域里，
+手机浏览器直接访问 PC 在热点里拿到的 IPv4 即可：
+
+1. 手机开个人热点 → PC 连上这个热点（建议先断开校园网有线，避免双网卡默认路由仍走有线）。
+2. 重启 `web_server.py`（或至少刷新一次 PC 页面，让 `/api/info` 重新枚举地址）。
+   服务会自动识别热点网段（`192.168.43.x` / `172.20.10.x` / `192.168.137.x` 等），
+   把热点 IPv4 排到候选第 1 条，`preferred_url` 与 `mobile_url` 都指向它，
+   并在横幅打印「检测到热点网段」。`/api/info` 里 `hotspot=true` 可作判断。
+3. 手机浏览器打开横幅第 1 条，例如 `http://192.168.43.77:8080/mobile.html`，加 `#auto` 直接进全屏。
+   页面只走同源 `/api/*`，所以不需要 Web Serial，也不需要公网。
+4. **防火墙必须放行**：Windows 会把新连的热点判成「公用网络」，默认封入站。
+   管理员 PowerShell 执行一次即可（IPv4/IPv6 都覆盖）：
+   ```powershell
+   New-NetFirewallRule -DisplayName "MSP430 手机端 8080" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Any
+   ```
+   Python 首次监听端口时若弹了「允许访问」而点了取消，必须补这条。
+
+> Android 热点一般允许「手机 → 客户端」互访；iPhone 个人热点个别版本对 Wi-Fi 客户端隔离较严，
+> 若手机打不开 PC 的地址，改用 USB 共享网络 + `adb reverse`（见第 4 条），或反过来让 PC 开移动热点。
+
+### 其它方案（校园网下仍想直连时）
+
+1. **IPv6 直连（校园网首选）**：手机连同一校园网，浏览器打开启动横幅第 1 条
+   `http://[2001:250:...]:8080/mobile.html`。CERNET2 一般给每台设备全球单播地址、无 NAT，端到端可达。
+   两台设备都要先过校园网 Portal 认证。热点场景下这条通常无效，服务会自动把它排到最后。
+2. **PC 开移动热点**：Windows 设置 → 移动热点 → 开，手机连上，重启服务后用 `192.168.137.x`。
+3. **USB + adb reverse**（Android，完全不走网络）：手机开 USB 调试，PC 执行
+   ```bash
+   adb reverse tcp:8080 tcp:8080
+   ```
+   手机浏览器打开 `http://127.0.0.1:8080/mobile.html`；页面的 `/api/*` 会一起转发到 PC。
+4. **ZeroTier / Tailscale**：两端加入同一虚拟网络，用虚拟 IP 访问，适合校园网把 IPv6 也封了的情况。
+
+> 不建议把 `mobile.html` 单独发布成公网静态页：它依赖本机的 `/api/*` 串口桥接，
+> 没有后端就没有遥测和指令下发。
+
+### 快速自检
+
+PC 上先确认双栈都在听，再换手机：
+
+```bash
+curl http://127.0.0.1:8080/api/info
+curl -g "http://[::1]:8080/api/info"
+```
+
+两条都返回 `addresses[]` 即服务侧没问题，剩下就是链路/防火墙问题。

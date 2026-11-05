@@ -23,7 +23,7 @@ try:
 except ImportError:
     HAS_SERIAL = False
 
-PORT = 8080
+PORT = int(os.environ.get('MSP430_PORT', '8080'))
 HTML_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 「串口已打开」与「小车真的在发帧」是两件事，必须分开上报：
@@ -180,12 +180,21 @@ class GroundStationHandler(SimpleHTTPRequestHandler):
             return
 
         elif path == '/api/info':
-            """给"手机当手柄"用：返回局域网地址，PC 页面上直接显示让手机扫码/手输。"""
-            ip = lan_ip()
+            """给"手机当手柄"用：把所有可达地址都返回，校园网 IPv4 不通时可选 IPv6。"""
+            entries = address_entries()
+            ip4 = lan_ip()
+            mobile_url = url_for(ip4)
+            preferred = entries[0]["url"] if entries else mobile_url
+            is_hotspot = any(a["kind"] == "ipv4-hotspot" for a in entries)
+            if is_hotspot:
+                mobile_url = preferred          # 旧页面只读 mobile_url，也要给对
             resp = {
                 "port": PORT,
-                "lan_ip": ip,
-                "mobile_url": f"http://{ip}:{PORT}/mobile.html",
+                "lan_ip": ip4,
+                "hotspot": is_hotspot,
+                "mobile_url": mobile_url,
+                "preferred_url": preferred,
+                "addresses": entries,
                 "pc_url": f"http://localhost:{PORT}/index.html",
             }
             self.send_response(200)
@@ -300,32 +309,177 @@ def lan_ip():
         s.close()
 
 
+def url_for(ip, page='mobile.html'):
+    """IPv6 地址在 URL 里必须加方括号，否则冒号会被当成端口分隔符。"""
+    host = f'[{ip}]' if ':' in ip else ip
+    return f'http://{host}:{PORT}/{page}'
+
+
+def _temporary_v6():
+    """Windows 隐私扩展生成的「临时 IPv6」会定期变，不适合当推荐地址，降权到末尾。"""
+    if os.name != 'nt':
+        return set()
+    try:
+        import re
+        import subprocess
+        raw = subprocess.check_output(['ipconfig', '/all'], timeout=2,
+                                      stderr=subprocess.DEVNULL)
+        text = raw.decode('mbcs', errors='ignore')
+        found = set()
+        for line in text.splitlines():
+            if 'Temporary' in line or '临时' in line:
+                cand = re.findall(r'(?:[0-9a-fA-F]{1,4}:){2,}[0-9a-fA-F]{1,4}', line)
+                if cand:
+                    found.add(cand[-1].lower())
+        return found
+    except Exception:
+        return set()
+
+
+def local_addresses():
+    """枚举本机全部可用地址，分成 (全球 IPv6, 局域网 IPv4)。
+
+    校园网常见情况：IPv4 是 10.x 私网、AP 隔离 / 跨网段不通，
+    但 IPv6 是全球单播且端到端可达 —— 所以两个都要给出来让用户试。
+    link-local(fe80::) 与 loopback 不能跨设备访问，直接过滤。
+    """
+    ips = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None,
+                                       socket.AF_UNSPEC, socket.SOCK_STREAM):
+            ip = (info[4][0] or '').split('%')[0]
+            if ip:
+                ips.add(ip)
+    except OSError:
+        pass
+    try:
+        ips.add(lan_ip())
+    except OSError:
+        pass
+
+    v6, v4 = [], []
+    for ip in sorted(ips):
+        low = ip.lower()
+        if ':' in ip:
+            if low.startswith(('fe80:', '::1', 'fc', 'fd')):
+                continue
+            v6.append(ip)
+        else:
+            if low.startswith(('127.', '169.254.')):
+                continue
+            v4.append(ip)
+    temp = _temporary_v6()
+    v6.sort(key=lambda ip: (ip.lower() in temp, ip))
+    return v6, v4
+
+
+# 常见热点网段：Windows 移动热点 / Android Wi-Fi 热点 / iPhone 个人热点 / USB 共享
+HOTSPOT_V4_PREFIXES = ('192.168.137.', '192.168.43.', '192.168.42.',
+                       '192.168.49.', '172.20.10.')
+
+
+def is_hotspot_v4(ip):
+    """判断某个 IPv4 是否来自热点网卡。热点里 IPv4 直连最可靠，IPv6 全球地址在该链路无效。"""
+    return ip.startswith(HOTSPOT_V4_PREFIXES)
+
+
+def address_entries():
+    """统一给 /api/info 与启动横幅用的地址清单（按当前网络形态自动排序）。"""
+    v6, v4 = local_addresses()
+    temp = _temporary_v6()
+    hotspot = [ip for ip in v4 if is_hotspot_v4(ip)]
+    v4_rest = [ip for ip in v4 if ip not in hotspot]
+    out = []
+    if hotspot:
+        for ip in hotspot:
+            out.append({"ip": ip, "url": url_for(ip), "kind": "ipv4-hotspot",
+                        "label": "热点直连（手机/PC 开热点时用这条，推荐）"})
+        for ip in v4_rest:
+            out.append({"ip": ip, "url": url_for(ip), "kind": "ipv4",
+                        "label": "IPv4 局域网（另一张网卡，可能不通）"})
+        for ip in v6:
+            out.append({"ip": ip, "url": url_for(ip), "kind": "ipv6",
+                        "label": "IPv6 校园网直连（热点下通常不可用）"})
+        return out
+
+    for idx, ip in enumerate(v6):
+        if ip.lower() in temp:
+            label = "IPv6 临时地址（会变，备选）"
+        elif idx == 0:
+            label = "IPv6 直连（校园网首选，稳定）"
+        else:
+            label = "IPv6 直连（备选）"
+        out.append({"ip": ip, "url": url_for(ip), "kind": "ipv6", "label": label})
+    for ip in v4_rest:
+        out.append({"ip": ip, "url": url_for(ip), "kind": "ipv4", "label": "IPv4 局域网"})
+    return out
+
+
+def make_server(family):
+    """按协议族起一个多线程 HTTP 服务；IPv6 强制 V6ONLY，避免和 IPv4 抢端口。"""
+    class _ThreadedServer(ThreadingHTTPServer):
+        address_family = family
+        allow_reuse_address = True
+        daemon_threads = True
+
+    if family == socket.AF_INET6:
+        class _V6Server(_ThreadedServer):
+            def server_bind(self):
+                try:
+                    self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                except (AttributeError, OSError):
+                    pass
+                super().server_bind()
+        return _V6Server(('::', PORT), GroundStationHandler)
+    return _ThreadedServer(('', PORT), GroundStationHandler)
+
+
 def main():
+    global g_running
     threading.Thread(target=rx_thread_worker, daemon=True).start()
 
-    server_address = ('', PORT)
-    # 必须多线程：手机和 PC 会同时以 20Hz 轮询 /api/telemetry，
-    # 单线程 HTTPServer 会被一个慢连接堵住所有人。
-    httpd = ThreadingHTTPServer(server_address, GroundStationHandler)
-    url = f"http://localhost:{PORT}/index.html"
-    ip = lan_ip()
-    mobile = f"http://{ip}:{PORT}/mobile.html"
-    print("=" * 64)
+    servers = []
+    for family, label in ((socket.AF_INET, 'IPv4'), (socket.AF_INET6, 'IPv6')):
+        try:
+            srv = make_server(family)
+        except OSError as e:
+            print(f"⚠ {label} 监听失败: {e}（另一协议仍可用）")
+            continue
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        servers.append((label, srv))
+    if not servers:
+        print(f"❌ 端口 {PORT} 两个协议都绑不上，检查是否被占用/权限")
+        return
+
+    addr_list = address_entries()
+    entries = [(a["label"], a["url"]) for a in addr_list]
+    print("=" * 72)
     print("🚀 MSP430 网页测控工作站已启动!")
-    print(f"👉 PC 端:   {url}")
-    print(f"👉 手机手柄: {mobile}   (手机与电脑连同一个 Wi-Fi)")
-    print("提示: 支持 Chrome / Edge Web Serial 原生直连与 Python 服务桥接双模")
-    print("=" * 64)
+    print(f"👉 PC 端:   http://localhost:{PORT}/index.html")
+    print(f"已监听: {', '.join(l for l, _ in servers)}  ·  端口 {PORT}")
+    print("手机手柄地址（按可达性从高到低试，第一个能打开就用它）:")
+    if addr_list and addr_list[0]["kind"] == "ipv4-hotspot":
+        print("   检测到热点网段：手机开热点 / PC 连手机热点时，直接用第 1 条 IPv4 即可，无需穿透")
+    if entries:
+        for i, (label, url) in enumerate(entries):
+            print(f"   {i + 1}. [{label}] {url}")
+            print(f"      全屏自动驾驶: {url}#auto")
+    else:
+        print("   ⚠ 没找到局域网地址，可用 PC 开热点 / USB 共享网络后重启本服务")
+    print(f"若都打不开：① 放行防火墙 TCP 入站 {PORT}  ② 校园网 AP 隔离时改开热点或 USB(adb reverse)")
+    print("=" * 72)
 
     # 自动弹出浏览器
-    threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    threading.Timer(0.8, lambda: webbrowser.open(f'http://localhost:{PORT}/index.html')).start()
 
     try:
-        httpd.serve_forever()
+        while True:
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("\n服务已停止。")
-        global g_running
         g_running = False
+        for _, srv in servers:
+            srv.shutdown()
 
 if __name__ == "__main__":
     main()

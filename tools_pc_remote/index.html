@@ -2957,16 +2957,22 @@
       const box = document.getElementById('logBox');
       if (box) box.innerHTML = '';
     }
-    /* 手机手柄入口：把局域网地址直接写进日志，手机照着输就行 */
+    /* 手机手柄入口：把所有可达地址写进日志（IPv6 / IPv4 都列，校园网挑能通的那个） */
     async function showMobileUrl() {
       try {
         const res = await fetch('/api/info');
         const j = await res.json();
-        appendLog('SYS', `手机浏览器打开 ${j.mobile_url}（手机与电脑连同一个 Wi-Fi）`);
-        appendLog('SYS', `想直接进全屏自动驾驶面板，用 ${j.mobile_url}#auto`);
+        const list = (j.addresses && j.addresses.length)
+          ? j.addresses
+          : [{ url: j.mobile_url, label: 'IPv4 局域网' }];
+        const best = j.preferred_url || list[0].url;
+        appendLog('SYS', `手机手柄地址（共 ${list.length} 个，按顺序试）:`);
+        list.forEach((a, i) => appendLog('SYS', `  ${i + 1}. [${a.label || '可用'}] ${a.url}`));
+        appendLog('SYS', `全屏自动驾驶面板: ${best}#auto`);
+        appendLog('SYS', '校园网 IPv4 不通就试 IPv6 那条；都不行请开热点 / USB 共享网络');
         if (navigator.clipboard) {
-          navigator.clipboard.writeText(j.mobile_url).catch(() => {});
-          appendLog('SYS', '地址已复制到剪贴板');
+          navigator.clipboard.writeText(best).catch(() => {});
+          appendLog('SYS', `已复制推荐地址 ${best}`);
         }
       } catch (e) {
         appendLog('SYS', '未通过 Python 服务打开页面，没有局域网地址；请用 web_server.py 启动');
