@@ -42,26 +42,25 @@
     height: 100dvh;
   }
 
-  /* ── 顶部状态条 ── */
-  header {
-    flex: 0 0 auto;
+  /* ── 状态小框：原顶部状态条已取消，横屏放到按键行的另一侧 ── */
+  .status-boxes {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    padding-top: calc(6px + env(safe-area-inset-top));
-    background: rgba(8, 12, 20, 0.92);
-    border-bottom: 1px solid var(--line);
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
   .pill {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
+    gap: 5px;
+    font-size: 10px;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 20px;
+    line-height: 1;
+    padding: 6px 8px;
+    border-radius: 8px;
     background: rgba(255, 51, 102, 0.15);
     color: var(--rd);
     border: 1px solid rgba(255, 51, 102, 0.35);
@@ -73,44 +72,32 @@
     background: rgba(0, 230, 118, 0.15);
     color: var(--gr);
     border-color: rgba(0, 230, 118, 0.4);
-    box-shadow: 0 0 12px rgba(0, 230, 118, 0.25);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.22);
   }
 
   .dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
+    flex: 0 0 auto;
     border-radius: 50%;
     background: currentColor;
-    box-shadow: 0 0 8px currentColor;
-  }
-
-  .hud {
-    margin-left: auto;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    font-family: Consolas, monospace;
-    font-size: 12px;
-    color: var(--mut);
-    white-space: nowrap;
-  }
-
-  .hud b {
-    color: #fff;
-    font-weight: 700;
+    box-shadow: 0 0 7px currentColor;
   }
 
   .badge {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 800;
-    padding: 3px 8px;
-    border-radius: 6px;
+    line-height: 1;
+    padding: 6px 8px;
+    border-radius: 8px;
     background: rgba(255, 255, 255, 0.07);
     color: var(--mut);
+    border: 1px solid var(--line);
+    white-space: nowrap;
   }
 
-  .badge.run { background: rgba(0, 230, 118, 0.16); color: var(--gr); }
-  .badge.brake { background: rgba(255, 179, 0, 0.16); color: var(--am); }
+  .badge.run { background: rgba(0, 230, 118, 0.16); color: var(--gr); border-color: rgba(0, 230, 118, 0.35); }
+  .badge.brake { background: rgba(255, 179, 0, 0.16); color: var(--am); border-color: rgba(255, 179, 0, 0.35); }
 
   /* ── 主体：左摇杆 + 右数据 ── */
   main {
@@ -119,21 +106,24 @@
     display: grid;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
     gap: 8px;
-    padding: 8px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-right: calc(8px + env(safe-area-inset-right));
     padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    padding-left: calc(8px + env(safe-area-inset-left));
   }
 
   .left {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 8px;
     justify-content: center;
+    gap: 8px;
     min-width: 0;
     min-height: 0;
   }
 
   .stick-zone {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -141,10 +131,14 @@
     overflow: hidden;
   }
 
+  .ctrl-row, .spd { position: relative; z-index: 2; }
+
   .stick {
     position: relative;
-    width: min(100%, 46vh);
+    width: min(100%, 42vh);
     aspect-ratio: 1 / 1;
+    flex: 0 0 auto;
+    pointer-events: auto;
     border-radius: 50%;
     background: radial-gradient(circle at 50% 50%, rgba(0, 242, 254, 0.07) 0%, rgba(5, 8, 14, 0.96) 70%);
     border: 2px solid rgba(0, 242, 254, 0.22);
@@ -187,33 +181,29 @@
     transition: none;
   }
 
-  .pads {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  /* 底部一条：左边小按键，右边状态小框，再下面是拉长的限速条 */
+  .ctrl-row {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
   }
+
+  .mini-btns { display: flex; gap: 6px; flex: 0 0 auto; }
 
   .btn {
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.05);
     color: #e8f1f8;
-    border-radius: 14px;
-    padding: 10px 6px;
-    font-size: 15px;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 12px;
     font-weight: 800;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1px;
+    line-height: 1;
+    white-space: nowrap;
     touch-action: none;
     transition: transform .06s, background .15s;
-  }
-
-  .btn small {
-    font-size: 9px;
-    font-weight: 500;
-    color: var(--mut);
-    letter-spacing: .4px;
   }
 
   .btn:active { transform: scale(0.96); }
@@ -221,35 +211,26 @@
   .btn.run { background: rgba(0, 230, 118, 0.14); border-color: rgba(0, 230, 118, 0.4); color: var(--gr); }
   .btn.run:active { background: var(--gr); color: #05210f; }
 
-  .btn.stop {
-    background: rgba(255, 51, 102, 0.18);
-    border-color: rgba(255, 51, 102, 0.45);
-    color: var(--rd);
-    padding: 14px 6px;
-    font-size: 17px;
-  }
-
-  .btn.stop:active { background: var(--rd); color: #fff; }
-
   .spd {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 10px;
+    gap: 10px;
+    height: 36px;
+    padding: 0 12px;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 10px;
     background: rgba(255, 255, 255, 0.03);
     min-width: 0;
-    overflow: hidden;
   }
 
-  .spd span { font-size: 11px; color: var(--mut); white-space: nowrap; }
+  .spd span { font-size: 10px; color: var(--mut); white-space: nowrap; flex: 0 0 auto; }
 
   .spd b {
     font-family: Consolas, monospace;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--am);
-    width: 38px;
+    width: 36px;
     flex: 0 0 auto;
     text-align: right;
   }
@@ -297,62 +278,101 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
-    height: 22vh;
-    max-height: 150px;
-    min-height: 92px;
+    padding: 6px;
   }
 
-  #compass { width: 100%; height: 100%; display: block; }
+  /* 与电脑端同一套罗盘：旋转刻度环 + 中央航向读数 */
+  .compass-dial {
+    width: min(100%, 190px);
+    aspect-ratio: 1 / 1;
+    position: relative;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(16, 24, 39, 0.9) 0%, rgba(5, 8, 14, 0.95) 100%);
+    border: 2px solid rgba(0, 242, 254, 0.3);
+    box-shadow: 0 0 22px rgba(0, 242, 254, 0.15), inset 0 0 20px rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-  .cmp-yaw {
+  .compass-needle-ring {
     position: absolute;
-    right: 8px;
-    bottom: 6px;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    transition: transform .08s linear;
+  }
+
+  .compass-val {
+    position: absolute;
+    text-align: center;
+    z-index: 2;
+    pointer-events: none;
+    padding: 3px 8px;
+    border-radius: 9px;
+    background: rgba(5, 8, 14, 0.82);
+    box-shadow: 0 0 12px rgba(5, 8, 14, 0.9);
+  }
+
+  .compass-val .deg {
     font-family: Consolas, monospace;
-    font-size: 11px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 10px var(--cy);
+    line-height: 1.1;
+  }
+
+  .compass-val .sub {
+    font-size: 9px;
     color: var(--cy);
-    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
   }
 
   .stats {
     flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2px;
-    padding: 7px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
   }
 
-  .stats > div {
+  .stat {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     min-width: 0;
   }
 
-  .stats span {
-    font-size: 10px;
+  .stat.divider { border-top: 1px solid var(--line); padding-top: 6px; }
+
+  .stat > span {
+    font-size: 9px;
+    letter-spacing: .8px;
     color: var(--mut);
-    line-height: 1.3;
-  }
-
-  .stats p {
-    margin: 0;
-    display: flex;
-    align-items: baseline;
-    gap: 2px;
-  }
-
-  .stats b {
-    font-family: Consolas, monospace;
-    font-size: 17px;
-    color: #fff;
-    font-weight: 800;
-    letter-spacing: -.4px;
     line-height: 1.2;
   }
 
-  .stats i { font-style: normal; font-size: 9px; color: var(--mut); }
+  .stat p {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .stat b {
+    font-family: Consolas, monospace;
+    font-size: 22px;
+    color: #fff;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    line-height: 1.15;
+  }
+
+  .stat i { font-style: normal; font-size: 10px; color: var(--mut); }
 
   .map-card {
     flex: 1;
@@ -452,20 +472,25 @@
     flex: 0 0 auto;
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 8px 10px 4px;
+    padding: 7px 10px 5px;
     border-top: 1px solid var(--line);
     background: rgba(8, 12, 20, 0.9);
   }
 
+  /* 按内容定宽，不再被 flex 拉成半屏长条 */
   .abtn {
-    flex: 1 1 30%;
+    flex: 0 0 auto;
+    min-width: 76px;
+    max-width: 150px;
     border: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.05);
     color: #e8f1f8;
-    border-radius: 11px;
-    padding: 10px 4px;
-    font-size: 13px;
+    border-radius: 10px;
+    padding: 8px 11px;
+    font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
     touch-action: none;
@@ -492,8 +517,7 @@
   }
 
   .abtn.sel {
-    flex: 0 0 auto;
-    padding: 10px 8px;
+    padding: 8px 10px;
     font-family: Consolas, monospace;
     background: rgba(255, 179, 0, 0.12);
     border-color: rgba(255, 179, 0, 0.35);
@@ -502,10 +526,14 @@
 
   .hint {
     flex: 1 0 100%;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--mut);
-    line-height: 1.5;
-    padding: 0 2px 2px;
+    line-height: 1.4;
+    padding: 1px 2px 2px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* ── 提示条 ── */
@@ -532,31 +560,72 @@
   .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
   @media (orientation: landscape) {
-    .compass-card { height: 26vh; }
-    .stick { width: min(100%, 62vh); }
+    main {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 6px;
+      padding-top: calc(6px + env(safe-area-inset-top));
+      padding-right: calc(6px + env(safe-area-inset-right));
+      padding-bottom: calc(6px + env(safe-area-inset-bottom));
+      padding-left: calc(6px + env(safe-area-inset-left));
+    }
+    .left { gap: 6px; justify-content: flex-end; }
+    /* 摇杆占满左半区并真正居中，底部按键/限速条浮在它上面 */
+    .stick-zone { position: absolute; inset: 0; pointer-events: none; }
+    .ctrl-row, .spd { position: relative; z-index: 2; }
+    .stick { width: min(100%, 52vh, 34vw); pointer-events: auto; }
+    .knob { font-size: 12px; }
+    .btn { padding: 7px 12px; font-size: 11px; }
+    /* 限速条占满左下栏：收窄两端文字，把长度都让给滑轨 */
+    .spd { height: 32px; padding: 0 9px; gap: 7px; }
+    .spd span { font-size: 9px; }
+    .spd b { width: 32px; }
+
+    /* 右侧两栏：上行左边车速/里程、右边罗盘；下行整宽行驶轨迹 */
+    .right {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-rows: minmax(96px, 0.82fr) minmax(110px, 1.18fr);
+      gap: 6px;
+    }
+    .right > .stats { grid-column: 1; grid-row: 1; padding: 6px 10px; }
+    .right > .compass-card { grid-column: 2; grid-row: 1; padding: 4px; }
+    .right > .map-card { grid-column: 1 / -1; grid-row: 2; height: 100%; min-height: 0; }
+    .stat b { font-size: 20px; }
+    .compass-dial { width: min(100%, 34vh, 150px); }
+    .compass-val .deg { font-size: 16px; }
+    .compass-val .sub { font-size: 8px; }
+  }
+
+  /* 竖屏窄：状态小框换到按键下面一行，避免挤到 RUN / 清零 上 */
+  @media (orientation: portrait) {
+    .ctrl-row { flex-wrap: wrap; }
+    .status-boxes { flex: 1 0 100%; justify-content: flex-start; }
+  }
+
+  /* 窄横屏：按钮再收一档，8 个仍排一行，地图不会被多挤掉一行 */
+  @media (orientation: landscape) and (max-width: 720px) {
+    .abtn { min-width: 64px; max-width: 120px; padding: 7px 9px; font-size: 11px; }
+    .abtn.sel { padding: 7px 9px; }
   }
 </style>
 </head>
 <body>
-
-<header>
-  <div class="pill" id="pill"><span class="dot"></span><span id="pillTxt">未连接</span></div>
-  <div class="hud">
-    <span class="badge" id="hudState">STOP</span>
-    <span>航向 <b id="hudYaw">0°</b></span>
-  </div>
-</header>
 
 <main>
   <section class="left">
     <div class="stick-zone">
       <div class="stick" id="stick"><div class="knob" id="knob">停止</div></div>
     </div>
-    <div class="pads">
-      <button class="btn run" id="btnRun">RUN<small>S1 启停</small></button>
-      <button class="btn" id="btnZero">清零<small>S2 里程航向</small></button>
+    <div class="ctrl-row">
+      <div class="mini-btns">
+        <button class="btn run" id="btnRun">RUN</button>
+        <button class="btn" id="btnZero">清零</button>
+      </div>
+      <div class="status-boxes">
+        <div class="pill" id="pill"><span class="dot"></span><span id="pillTxt">未连接</span></div>
+        <span class="badge" id="hudState">STOP</span>
+      </div>
     </div>
-    <button class="btn stop" id="btnStop">急停</button>
     <div class="spd">
       <span>限速</span>
       <input type="range" id="spd" min="10" max="100" step="5" value="50">
@@ -565,13 +634,29 @@
   </section>
 
   <section class="right">
-    <div class="card compass-card">
-      <canvas id="compass"></canvas>
-      <div class="cmp-yaw" id="cmpYaw">0°</div>
-    </div>
     <div class="card stats">
-      <div><span>车速</span><p><b id="stSpeed">0.00</b><i>m/s</i></p></div>
-      <div><span>里程</span><p><b id="stDist">0.00</b><i>m</i></p></div>
+      <div class="stat"><span>车速 SPEED</span><p><b id="stSpeed">0.00</b><i>m/s</i></p></div>
+      <div class="stat divider"><span>里程 DIST</span><p><b id="stDist">0.00</b><i>m</i></p></div>
+    </div>
+    <div class="card compass-card">
+      <div class="compass-dial">
+        <svg class="compass-needle-ring" id="compassRing" viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="92" fill="none" stroke="rgba(0, 242, 254, 0.2)" stroke-width="1.5" />
+          <circle cx="100" cy="100" r="82" fill="none" stroke="rgba(255, 255, 255, 0.05)" stroke-width="1" />
+          <text x="100" y="24" fill="#ff3366" font-size="12" font-weight="900" text-anchor="middle">N</text>
+          <text x="100" y="184" fill="#8899a6" font-size="11" font-weight="700" text-anchor="middle">S</text>
+          <text x="180" y="104" fill="#8899a6" font-size="11" font-weight="700" text-anchor="middle">E</text>
+          <text x="20" y="104" fill="#8899a6" font-size="11" font-weight="700" text-anchor="middle">W</text>
+          <polygon points="100,32 105,95 95,95" fill="#ff3366" />
+          <polygon points="100,168 105,105 95,105" fill="#4a5568" />
+          <circle cx="100" cy="100" r="7" fill="#00f2fe" />
+          <circle cx="100" cy="100" r="3" fill="#ffffff" />
+        </svg>
+        <div class="compass-val">
+          <div class="deg" id="cmpYaw">+0°</div>
+          <div class="sub">航向角 YAW</div>
+        </div>
+      </div>
     </div>
     <div class="card map-card" id="mapWrap">
       <canvas id="mapCanvas"></canvas>
@@ -636,8 +721,7 @@ const toastEl = $('toast');
 const mapWrap = $('mapWrap');
 const mapCanvas = $('mapCanvas');
 const mapCtx = mapCanvas.getContext('2d');
-const compassCanvas = $('compass');
-const compassCtx = compassCanvas.getContext('2d');
+const compassRing = $('compassRing');
 const modal = $('modal'), modalHost = $('modalHost');
 
 /* ── 全局状态 ── */
@@ -773,9 +857,10 @@ stick.addEventListener('pointerup', releaseStick);
 stick.addEventListener('pointercancel', releaseStick);
 stick.addEventListener('lostpointercapture', releaseStick);
 
-/* ══════════════════════ 按钮 ══════════════════════ */
-$('btnStop').addEventListener('pointerdown', (e) => {
-  e.preventDefault();
+/* ══════════════════════ 按钮 ══════════════════════
+ * 横屏布局取消了急停大按钮：松开摇杆本身就会发 !DIR:0# 停车，
+ * 自动驾驶面板里也仍有「停止」。这里保留一个函数供长按 RUN 兜底。 */
+function emergencyStop() {
   releaseStick();
   mask = 0;
   applyKnob(0, 0);
@@ -786,13 +871,31 @@ $('btnStop').addEventListener('pointerdown', (e) => {
   setTimeout(() => send(' '), 20);
   vibrate(30);
   toast('已急停', 1200);
-});
+}
 
-$('btnRun').addEventListener('pointerdown', (e) => {
+/* 短按 RUN = 启停切换；长按 650ms = 急停（急停大按钮取消后的兜底） */
+let runHoldTimer = null, runHeld = false;
+const btnRun = $('btnRun');
+btnRun.addEventListener('pointerdown', (e) => {
   e.preventDefault();
+  runHeld = false;
+  try { btnRun.setPointerCapture(e.pointerId); } catch (err) { /* 老 Safari */ }
+  runHoldTimer = setTimeout(() => {
+    runHeld = true;
+    runHoldTimer = null;
+    emergencyStop();
+  }, 650);
+});
+btnRun.addEventListener('pointerup', () => {
+  if (runHoldTimer) { clearTimeout(runHoldTimer); runHoldTimer = null; }
+  if (runHeld) { runHeld = false; return; }
   send('1');
   vibrate(12);
   toast('启停切换（S1）', 1200);
+});
+btnRun.addEventListener('pointercancel', () => {
+  if (runHoldTimer) { clearTimeout(runHoldTimer); runHoldTimer = null; }
+  runHeld = false;
 });
 
 $('btnZero').addEventListener('pointerdown', (e) => {
@@ -984,57 +1087,34 @@ function renderMap() {
   }
 }
 
-/* ══════════════════════ 罗盘 ══════════════════════ */
-function renderCompass() {
-  const r = compassCanvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
-  if (compassCanvas.width !== Math.round(w * dpr) || compassCanvas.height !== Math.round(h * dpr)) {
-    compassCanvas.width = Math.round(w * dpr);
-    compassCanvas.height = Math.round(h * dpr);
+/* ══════════════════════ 罗盘（与电脑端同一套旋转刻度环） ══════════════════════ */
+let g_compassYaw;
+function updateCompass(yaw) {
+  if (typeof g_compassYaw === 'undefined') {
+    g_compassYaw = yaw;
+  } else {
+    /* 走最短几何路径，跨越 ±180° 时不会整圈倒转 */
+    const diff = ((yaw - g_compassYaw + 180) % 360 + 360) % 360 - 180;
+    g_compassYaw += diff;
   }
-  const c = compassCtx;
-  c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  c.clearRect(0, 0, w, h);
+  compassRing.style.transform = `rotate(${g_compassYaw}deg)`;
+  $('cmpYaw').innerText = (yaw >= 0 ? '+' : '') + yaw.toFixed(0) + '°';
+}
 
-  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 6;
-  if (R < 8) return;
-
-  c.strokeStyle = 'rgba(255,255,255,0.14)';
-  c.lineWidth = 1.5;
-  c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
-
-  /* 刻度 */
-  for (let a = 0; a < 360; a += 30) {
-    const rad = (a - 90) * Math.PI / 180;
-    const r1 = R * (a % 90 === 0 ? 0.80 : 0.88);
-    c.strokeStyle = a % 90 === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.13)';
-    c.beginPath();
-    c.moveTo(cx + Math.cos(rad) * r1, cy + Math.sin(rad) * r1);
-    c.lineTo(cx + Math.cos(rad) * R, cy + Math.sin(rad) * R);
-    c.stroke();
-  }
-
-  /* 指针：车头方向 */
-  const rad = (T.yaw - 90) * Math.PI / 180;
-  c.save();
-  c.translate(cx, cy);
-  c.rotate(rad + Math.PI / 2);
-  c.fillStyle = '#00f2fe';
-  c.shadowColor = '#00f2fe';
-  c.shadowBlur = 8;
-  c.beginPath();
-  c.moveTo(0, -R * 0.72);
-  c.lineTo(R * 0.16, R * 0.34);
-  c.lineTo(0, R * 0.18);
-  c.lineTo(-R * 0.16, R * 0.34);
-  c.closePath();
-  c.fill();
-  c.restore();
-
-  c.fillStyle = 'rgba(255,255,255,0.5)';
-  c.font = '9px Consolas, monospace';
-  c.textAlign = 'center';
+/* 摇杆在左半区正中取正方形：先扣掉底部按键条和限速条的高度，
+ * 再横屏收一点，保证既不被裁切也不压住按钮。 */
+function sizeStick() {
+  const zone = document.querySelector('.stick-zone');
+  const row = document.querySelector('.ctrl-row');
+  const bar = document.querySelector('.spd');
+  if (!zone || !row || !bar) return;
+  const landscape = window.innerWidth > window.innerHeight;
+  /* 横屏时 zone 铺满左半区，要扣掉底部两条；竖屏时 zone 本就是剩余空间，不再扣 */
+  const reserved = landscape ? (row.offsetHeight + bar.offsetHeight + 18) : 0;
+  const lim = Math.min(zone.clientWidth, zone.clientHeight - reserved);
+  if (lim <= 0) return;
+  const f = landscape ? 0.68 : 0.92;
+  stick.style.width = Math.max(96, Math.round(lim * f)) + 'px';
 }
 
 /* ══════════════════════ 自动驾驶核心 ══════════════════════
@@ -1351,15 +1431,12 @@ function drawModeOn(on) {
   }
 }
 
-/* 把小地图搬到全屏面板里 / 搬回右列（紧跟里程卡片之后） */
+/* 把小地图搬到全屏面板里 / 搬回右列。
+ * 右列横屏是两栏 grid，地图靠 CSS 显式放在第 2 行整宽，
+ * 所以这里直接 append 即可，不依赖兄弟节点顺序。 */
 function moveMapTo(parent) {
   if (!parent) return;
-  if (parent === modalHost) {
-    modalHost.appendChild(mapWrap);
-  } else {
-    const stats = parent.querySelector('.stats');
-    parent.insertBefore(mapWrap, stats ? stats.nextSibling : null);
-  }
+  parent.appendChild(mapWrap);
   requestAnimationFrame(() => { resizeMap(); renderMap(); });
 }
 
@@ -1571,8 +1648,7 @@ async function pollTelemetry() {
 
       $('stSpeed').innerText = S.speed.toFixed(2);
       $('stDist').innerText = S.dist.toFixed(2);
-      $('hudYaw').innerText = Math.round(((d.yaw || 0) % 360 + 360) % 360) + '°';
-      $('cmpYaw').innerText = ((d.yaw || 0) >= 0 ? '+' : '') + (d.yaw || 0).toFixed(0) + '°';
+      updateCompass(d.yaw || 0);
 
       const st = $('hudState');
       if (S.state === 1) { st.innerText = 'RUN'; st.className = 'badge run'; }
@@ -1603,7 +1679,6 @@ function loop() {
   if (now - lastDraw > 50) {
     lastDraw = now;
     renderMap();
-    renderCompass();
   }
   requestAnimationFrame(loop);
 }
@@ -1616,8 +1691,13 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 window.addEventListener('blur', releaseStick);
-window.addEventListener('resize', () => { resizeMap(); });
-window.addEventListener('orientationchange', () => { setTimeout(resizeMap, 200); });
+window.addEventListener('resize', () => { resizeMap(); sizeStick(); });
+window.addEventListener('orientationchange', () => {
+  setTimeout(() => { resizeMap(); sizeStick(); }, 200);
+});
+if (window.ResizeObserver) {
+  new ResizeObserver(() => sizeStick()).observe(document.querySelector('.stick-zone'));
+}
 
 let wakeLock = null;
 async function keepAwake() {
@@ -1633,7 +1713,9 @@ document.addEventListener('visibilitychange', () => {
   /* 手柄默认值同步车端限速 */
   spd.value = '50';
   spdVal.innerText = '50%';
+  updateCompass(0);
   resizeMap();
+  sizeStick();
   setInterval(() => {
     if (mask !== 0 && Date.now() - lastTx > 200) sendMask();
   }, 100);
