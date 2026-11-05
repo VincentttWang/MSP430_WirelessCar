@@ -46,25 +46,46 @@ typedef struct {
 ## 默认参数
 
 ```c
-#define LINE_TRACKING_DEFAULT_BASE_DUTY 35.0f
+#define LINE_TRACKING_DEFAULT_BASE_DUTY 28.0f
 #define LINE_TRACKING_DEFAULT_OUTPUT_LIMIT 100.0f
-#define LINE_TRACKING_DEFAULT_CORRECTION_LIMIT 60.0f
-#define LINE_TRACKING_DEFAULT_DIFFERENTIAL_LIMIT 10.0f
-#define LINE_TRACKING_DEFAULT_POSITION_SCALE 10.0f
+#define LINE_TRACKING_DEFAULT_CORRECTION_LIMIT 35.0f
+#define LINE_TRACKING_DEFAULT_DIFFERENTIAL_LIMIT 50.0f
+#define LINE_TRACKING_DEFAULT_POSITION_SCALE 1.0f
 #define LINE_TRACKING_ACTIVE_SENSOR_MASK 0xFFU
 ```
 
-默认 PID 为位置式 PID：
+默认 PID 为位置式 PID（纯 PD，现场一般不需要积分）：
 
 ```text
-kp = 30.0
+kp = 4.2
 ki = 0.0
-kd = 1.5
-integral_limit = 500.0
-output_limit = 60.0
+kd = 0.5
+integral_limit = 50.0
+output_limit = 35.0
 ```
 
+八路探头横向位置为 `-3.5 ~ +3.5`，加权平均后得到偏差；中心通道对齐时 `|error| < 0.20` 直接归零（死区），
+再做一阶低通 `0.70*old + 0.30*new`，抑制探头离散跳变导致的微分冲击。
+
 `LINE_TRACKING_ACTIVE_SENSOR_MASK` 用于选择参与巡线控制的灰度通道。当前值 `0xFF` 启用 0 到 7 的全部 8 路灰度传感器。
+
+## 在线整定（上位机 → 小车）
+
+参数可以在网页「循线 PID 调节」面板里直接改，走无线串口文本包，不需要重新烧录固件：
+
+| 方向 | 报文 | 说明 |
+| --- | --- | --- |
+| 上位机 → 小车 | `!SET:PID=4.2,0,0.5#` | 三项一起下发（推荐） |
+| 上位机 → 小车 | `!SET:KP=4.2#` / `!SET:KI=0#` / `!SET:KD=0.5#` | 单项下发，兼容旧上位机；未指定的项保持原值 |
+| 上位机 → 小车 | `!GET:PID#` | 回读当前参数 |
+| 小车 → 上位机 | `!PID=420,0,50#` | 回读/设置确认帧，数值为 `×100` 的整数 |
+
+回读帧用整数是为了绕开 MicroLIB 不带浮点 `printf` 的限制。固件在 `app/app_remote_car_task.c`
+里解析并调用 `LineTracking_SetPid()`，取值范围在 app 层被钳到 `kp ∈ [0,20]`、`ki ∈ [0,5]`、`kd ∈ [0,10]`。
+
+调参顺序：先把 `Ki`、`Kd` 置零，只调 `Kp` 到能跟过所有弯、直道刚要开始摆头；再加 `Kd`（0.3~0.8）压住摆动；
+`Ki` 保持 0，只有长期单侧蹭线才加 0.01~0.05。**换速度后要重看一遍**：基础占空比由上位机左侧限速滑块决定，
+同一组增益在不同速度下阻尼比不同。
 
 ## 接口
 
@@ -76,6 +97,15 @@ output_limit = 60.0
 
 清空 PID 状态和最近一次输出。
 
+### `void LineTracking_SetBaseDuty(float duty)` / `float LineTracking_GetBaseDuty(void)`
+
+动态设置/读取巡线基础占空比（0~100%），对应上位机的「当前动力输出限速」。
+
+### `void LineTracking_SetPid(float kp, float ki, float kd)` / `void LineTracking_GetPid(float *kp, float *ki, float *kd)`
+
+在线设置/回读巡线 PID 参数。设置时会用新的 `pid_config` 重新初始化 PID 控制器（同时清零积分项），
+所以改参数不会带入上一组参数残留的积分状态。回读接口的输出指针允许传 `NULL`。
+
 ### `BSP_STATUS LineTracking_Update(float dt_s)`
 
 完整巡线闭环入口：
@@ -84,7 +114,8 @@ output_limit = 60.0
 2. 调用 `LineTracking_Compute()` 计算左右轮占空比，只统计 `LINE_TRACKING_ACTIVE_SENSOR_MASK` 启用的通道。
 3. 若未丢线，则调用 `Chassis_SetDuty()` 输出到底盘。
 
-循迹输出会先限制 PID 转向修正量，使左右轮占空比差值不超过 `differential_limit`，再执行最终输出限幅。当前默认差值上限为 `10%`。该限制只影响 `LineTracking_Update()` 路径，不影响 `core/motion` 的直行、倒车或原地转向动作。
+循迹输出会先把 PID 转向修正量限制在 `differential_limit * 0.5` 内（默认 ±25%），
+再执行最终输出限幅。当前默认差值上限为 `50%`。该限制只影响 `LineTracking_Update()` 路径，不影响 `core/motion` 的直行、倒车或原地转向动作。
 
 如果当前未检测到线，函数返回 `BSP_STATUS_NOT_READY`，不主动输出底盘占空比。题目流程可根据自身策略决定刹车、继续搜索或切换状态。
 

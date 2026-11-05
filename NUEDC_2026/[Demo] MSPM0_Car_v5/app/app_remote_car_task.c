@@ -133,6 +133,20 @@ static void AppRemoteCar_SendCalibProbes(void)
     AppRemoteCar_SendPacket(resp);
 }
 
+/* 回读巡线 PID：!PID=<kp*100>,<ki*100>,<kd*100>#
+ * 用 ×100 整数而不是 %f：MicroLIB 的 printf 默认不带浮点格式化。 */
+static void AppRemoteCar_ReportPid(void)
+{
+    char resp[48];
+    float kp = 0.0f, ki = 0.0f, kd = 0.0f;
+    LineTracking_GetPid(&kp, &ki, &kd);
+    snprintf(resp, sizeof(resp), "!PID=%d,%d,%d#",
+             (int)(kp * 100.0f + 0.5f),
+             (int)(ki * 100.0f + 0.5f),
+             (int)(kd * 100.0f + 0.5f));
+    AppRemoteCar_SendPacket(resp);
+}
+
 /* 退出校准向导：状态、陀螺仪挂起、动作标志一次收口。
  * "按键退出 / 上位机 EXIT / 成功后自动退出 / 超时兜底"四条路径共用，
  * 不会再出现某条路径漏改一个标志、屏幕停在向导页的情况。 */
@@ -876,24 +890,43 @@ static void AppRemoteCar_ParsePacketCommand(const char *pkt, uint8_t src){
         return;
     }
 
-    /* 识别 !SET:KP=xx# 和 !SET:KD=xx# 巡线 PID 参数在线调节 */
-    static float s_line_kp = 4.2f;
-    static float s_line_kd = 0.5f;
-    if (strncmp(pkt, "!SET:KP=", 8) == 0){
-        float kp = 4.2f;
-        if (sscanf(pkt + 8, "%f", &kp) == 1){
-            s_line_kp = kp;
-            LineTracking_SetPid(s_line_kp, 0.0f, s_line_kd);
-            s_last_cmd_ms = BSP_Time_GetMs();
-        }
+    /* ── 巡线 PID 在线整定 ──
+     * 单项下发：!SET:KP=4.2#  /  !SET:KI=0#  /  !SET:KD=0.5#   （兼容旧上位机）
+     * 三项一起：!SET:PID=4.2,0,0.5#
+     * 回读：    !GET:PID#   →   !PID=<kp*100>,<ki*100>,<kd*100>#
+     * 回读用 ×100 的整数：newlib-nano / MicroLIB 的 printf 默认不带浮点格式化，
+     * 传浮点会打印成空串，这里绕开它。每次设置成功也回一帧 !PID= 做确认。 */
+    if (strncmp(pkt, "!GET:PID", 8) == 0 || strncmp(pkt, "!PID:GET", 8) == 0){
+        AppRemoteCar_ReportPid();
         return;
     }
-    if (strncmp(pkt, "!SET:KD=", 8) == 0){
-        float kd = 0.5f;
-        if (sscanf(pkt + 8, "%f", &kd) == 1){
-            s_line_kd = kd;
-            LineTracking_SetPid(s_line_kp, 0.0f, s_line_kd);
+    if (strncmp(pkt, "!SET:PID=", 9) == 0 ||
+        strncmp(pkt, "!SET:KP=", 8) == 0 ||
+        strncmp(pkt, "!SET:KI=", 8) == 0 ||
+        strncmp(pkt, "!SET:KD=", 8) == 0){
+        float kp = 0.0f, ki = 0.0f, kd = 0.0f;
+        LineTracking_GetPid(&kp, &ki, &kd);
+        float n_kp = kp, n_ki = ki, n_kd = kd;
+        int got = 0;
+        if (strncmp(pkt, "!SET:PID=", 9) == 0){
+            got = sscanf(pkt + 9, "%f,%f,%f", &n_kp, &n_ki, &n_kd);
+        } else if (strncmp(pkt, "!SET:KP=", 8) == 0){
+            got = sscanf(pkt + 8, "%f", &n_kp);
+        } else if (strncmp(pkt, "!SET:KI=", 8) == 0){
+            got = sscanf(pkt + 8, "%f", &n_ki);
+        } else {
+            got = sscanf(pkt + 8, "%f", &n_kd);
+        }
+        if (got >= 1){
+            if (n_kp < 0.0f) { n_kp = 0.0f; }
+            if (n_ki < 0.0f) { n_ki = 0.0f; }
+            if (n_kd < 0.0f) { n_kd = 0.0f; }
+            if (n_kp > 20.0f) { n_kp = 20.0f; }
+            if (n_ki > 5.0f)  { n_ki = 5.0f; }
+            if (n_kd > 10.0f) { n_kd = 10.0f; }
+            LineTracking_SetPid(n_kp, n_ki, n_kd);
             s_last_cmd_ms = BSP_Time_GetMs();
+            AppRemoteCar_ReportPid();
         }
         return;
     }

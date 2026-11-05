@@ -85,6 +85,14 @@ float LineTracking_GetBaseDuty(void);
 void LineTracking_SetPid(float kp, float ki, float kd);
 
 /**
+ * @brief 读取当前巡线 PID 参数（上位机在线整定后回读用）。
+ * @param kp 输出比例增益指针，可为 NULL。
+ * @param ki 输出积分增益指针，可为 NULL。
+ * @param kd 输出微分增益指针，可为 NULL。
+ */
+void LineTracking_GetPid(float *kp, float *ki, float *kd);
+
+/**
  * @brief 读取当前巡线状态并驱动底盘。
  * @param dt_s 控制周期，单位 s。
  * @return BSP_STATUS_OK 表示底盘输出已更新。

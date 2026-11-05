@@ -88,6 +88,13 @@ void LineTracking_SetPid(float kp, float ki, float kd){
     PID_Init(&s_line_tracking_pid, &s_line_tracking_config.pid_config);
 }
 
+void LineTracking_GetPid(float *kp, float *ki, float *kd){
+    LineTracking_EnsureInitialized();
+    if (kp != NULL){ *kp = s_line_tracking_config.pid_config.kp; }
+    if (ki != NULL){ *ki = s_line_tracking_config.pid_config.ki; }
+    if (kd != NULL){ *kd = s_line_tracking_config.pid_config.kd; }
+}
+
 BSP_STATUS LineTracking_Update(float dt_s){
     LineTracking_EnsureInitialized();
 

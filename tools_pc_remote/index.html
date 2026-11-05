@@ -820,6 +820,75 @@
       white-space: nowrap;
     }
     .map-wrap.drawing .draw-hud { display: block; }
+    /* ── 循线 PID 整定面板 ── */
+    .pid-row {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      border-radius: 10px;
+      padding: 12px 14px 10px;
+      margin-bottom: 10px;
+    }
+    .pid-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .pid-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+      letter-spacing: 0.3px;
+    }
+    .pid-val {
+      font-family: "Consolas", monospace;
+      font-size: 15px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .pid-range {
+      width: 100%;
+      margin: 2px 0 4px;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+    .pid-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.55;
+    }
+    .pid-hint b { color: #cbd5e1; }
+    .pid-note {
+      background: rgba(30, 58, 138, 0.22);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin: 4px 0 6px;
+    }
+    .pid-note-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #7dd3fc;
+      margin-bottom: 6px;
+    }
+    .pid-steps {
+      margin: 0 0 6px 18px;
+      padding: 0;
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .pid-steps b { color: #fbbf24; }
+    .pid-note-foot {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.6;
+      border-top: 1px dashed rgba(148, 163, 184, 0.25);
+      padding-top: 6px;
+    }
+    .pid-note-foot b { color: #fbbf24; }
+    #pidModal .btn-preset { white-space: nowrap; }
+    #pidModal .enlarge-footer { flex-wrap: wrap; }
     .map-wrap.drawing { cursor: crosshair; }
     .map-wrap.drawing .map-hint::after { content: ''; }
     .auto-sel {
@@ -1577,9 +1646,9 @@
         </div>
         <!-- 辅助功能按键组 -->
         <div class="aux-deck">
-          <button class="btn-aux" onclick="sendCmd('1')">
-            <span>双端启停联动</span>
-            <span class="key">按键 1 / MSP430 S1</span>
+          <button class="btn-aux" onclick="openPidModal()">
+            <span>循线 PID 调节</span>
+            <span class="key">Kp / Ki / Kd 在线整定</span>
           </button>
           <button class="btn-aux" onclick="onClearOdo()">
             <span>里程航向清零</span>
@@ -1774,6 +1843,68 @@
         <div style="display: flex; gap: 10px;">
           <button class="btn-preset" onclick="sendCalibReset()" style="color: #94a3b8;">重置向导</button>
           <button class="btn-preset on" onclick="closeSensorCalibModal()">完成并退出</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- 循线 PID 在线整定模态框 -->
+  <div id="pidModal" class="enlarge-modal" style="display: none;" onclick="onPidBackdropClick(event)">
+    <div class="enlarge-dialog" style="max-width: 780px; height: auto; max-height: 90vh;" onclick="event.stopPropagation()">
+      <div class="enlarge-header">
+        <div class="enlarge-title-box">
+          <span class="enlarge-icon">🎛️</span>
+          <div>
+            <div class="enlarge-title">循线 PID 在线整定 · 感为八路</div>
+            <div class="enlarge-sub">只调巡线环路 Kp / Ki / Kd，下发后立即生效，不用重烧固件</div>
+          </div>
+        </div>
+        <button class="btn-close-modal" onclick="closePidModal()">✕ 关闭 (ESC)</button>
+      </div>
+      <div class="enlarge-content" style="padding: 18px 20px 8px; overflow-y: auto; display: block;">
+        <div class="pid-row">
+          <div class="pid-head">
+            <span class="pid-name">Kp · 比例</span>
+            <span class="pid-val" id="pidKpVal">4.20</span>
+          </div>
+          <input id="pidKp" class="pid-range" type="range" min="0" max="12" step="0.05" value="4.2" oninput="pidSync('kp')">
+          <div class="pid-hint">偏差 → 差速修正的力度。<b>太小</b>拐不过弯、直接冲出去；<b>太大</b>直道左右摆头。</div>
+        </div>
+        <div class="pid-row">
+          <div class="pid-head">
+            <span class="pid-name">Ki · 积分</span>
+            <span class="pid-val" id="pidKiVal">0.00</span>
+          </div>
+          <input id="pidKi" class="pid-range" type="range" min="0" max="1.5" step="0.01" value="0" oninput="pidSync('ki')">
+          <div class="pid-hint">一般保持 <b>0</b>：八路灰度给的是位置量，没有稳态误差，纯 PD 足够。只有车长期往一侧蹭线时才加 0.01~0.05。</div>
+        </div>
+        <div class="pid-row">
+          <div class="pid-head">
+            <span class="pid-name">Kd · 微分</span>
+            <span class="pid-val" id="pidKdVal">0.50</span>
+          </div>
+          <input id="pidKd" class="pid-range" type="range" min="0" max="4" step="0.05" value="0.5" oninput="pidSync('kd')">
+          <div class="pid-hint">抑制摆头的阻尼。加到"能压住摆动、又不会在弯里发木"为止，常用 0.3~0.8。</div>
+        </div>
+        <div class="pid-note">
+          <div class="pid-note-title">📖 三步调法（每次只改一项，改完跑一趟直道 + 一个弯再动下一项）</div>
+          <ol class="pid-steps">
+            <li>把 <b>Ki 拉到 0、Kd 拉到 0</b>，只加 Kp：加到车能稳稳跟过所有弯，再大一点就开始左右摆 —— 退回上一档。</li>
+            <li>加 <b>Kd</b>：从 0.3 起一点一点加，摆头明显收敛就停；加过头会变得迟钝、弯道切角。</li>
+            <li><b>Ki 保持 0</b>。只有"同一条直道上车总往一边偏"才加 0.01~0.05，宁小勿大，否则会慢慢积累成画龙。</li>
+          </ol>
+          <div class="pid-note-foot">
+            巡线基础占空比由左侧「当前动力输出限速」决定；<b>换速度后要重新看一遍</b> —— 速度快了同样的 Kp 会显得偏软。
+          </div>
+        </div>
+      </div>
+      <div class="enlarge-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+        <div id="pidStatus" style="font-size: 12px; color: #a5f3fc;">未读取，点「读取当前值」可回读小车里的参数</div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-preset" onclick="pidRead()">读取当前值</button>
+          <button class="btn-preset" onclick="pidPreset('soft')">稳一点</button>
+          <button class="btn-preset" onclick="pidPreset('sharp')">灵一点</button>
+          <button class="btn-preset" onclick="pidPreset('default')">恢复默认</button>
+          <button class="btn-preset on" onclick="pidSend()">下发到小车</button>
         </div>
       </div>
     </div>
@@ -2033,6 +2164,8 @@
     }
     function onCalibPacketReceived(text) {
       if (!text) return;
+      /* 巡线 PID 回读帧（!PID=...）在这里分流，和校准无关 */
+      if (onPidPacket(text)) return;
       if (text.startsWith('!CAL:PROBES,')) {
         // 格式: !CAL:PROBES,<mask_hex>,<i2c_online>,<addr_hex>,<v0>,...,<v7>#
         const raw = text.replace('!CAL:PROBES,', '').replace('#', '');
@@ -2133,10 +2266,118 @@
         appendLog('CAL', '车端退出校准模式，恢复正常运行');
       }
     }
-    function resetTrackingPid() {
-      writeSerial('!SET:KP=4.2#');
-      setTimeout(() => writeSerial('!SET:KD=0.5#'), 50);
-      appendLog('PID', '下发循线参数: Kp=4.2, Kd=0.5 (抑制蛇形震荡最佳调谐值)');
+    /* ══════════════════════════════════════════════════════════════════
+     * 循线 PID 在线整定（固件协议：!SET:PID=kp,ki,kd# / !GET:PID#）
+     *
+     * 只管巡线环路的 Kp/Ki/Kd（core/line_tracking），不动直行航向锁和
+     * 速度环那两套 PID —— 那两套是底盘稳定的地基，现场不该随手改。
+     * 参数存在 localStorage 里，下次连上自动补发一遍。
+     * ══════════════════════════════════════════════════════════════════ */
+    const PID_DEFAULT = { kp: 4.2, ki: 0.0, kd: 0.5 };
+    const PID_STORE_KEY = 'line_pid_v1';
+    const g_pid = { kp: PID_DEFAULT.kp, ki: PID_DEFAULT.ki, kd: PID_DEFAULT.kd, fromBoard: false };
+
+    function pidLoadSaved() {
+      try {
+        const raw = lsGet(PID_STORE_KEY);
+        if (!raw) return false;
+        const o = JSON.parse(raw);
+        if (isFinite(o.kp) && isFinite(o.ki) && isFinite(o.kd)) {
+          g_pid.kp = +o.kp; g_pid.ki = +o.ki; g_pid.kd = +o.kd;
+          return true;
+        }
+      } catch (err) { /* 坏了就用默认值 */ }
+      return false;
+    }
+    function pidSave() {
+      lsSet(PID_STORE_KEY, JSON.stringify({ kp: g_pid.kp, ki: g_pid.ki, kd: g_pid.kd }));
+    }
+    function pidSetStatus(txt, tone) {
+      const el = document.getElementById('pidStatus');
+      if (!el) return;
+      el.innerText = txt;
+      el.style.color = tone === 'ok' ? '#4ade80' : (tone === 'warn' ? '#fbbf24' : '#a5f3fc');
+    }
+    function pidApplyUI() {
+      const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val.toFixed(2);
+      };
+      set('pidKp', g_pid.kp);
+      set('pidKi', g_pid.ki);
+      set('pidKd', g_pid.kd);
+      const setTxt = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val.toFixed(2);
+      };
+      setTxt('pidKpVal', g_pid.kp);
+      setTxt('pidKiVal', g_pid.ki);
+      setTxt('pidKdVal', g_pid.kd);
+    }
+    function pidSync(which) {
+      const idMap = { kp: 'pidKp', ki: 'pidKi', kd: 'pidKd' };
+      const valMap = { kp: 'pidKpVal', ki: 'pidKiVal', kd: 'pidKdVal' };
+      const el = document.getElementById(idMap[which]);
+      if (!el) return;
+      const v = Math.max(0, parseFloat(el.value) || 0);
+      g_pid[which] = v;
+      const lbl = document.getElementById(valMap[which]);
+      if (lbl) lbl.textContent = v.toFixed(2);
+    }
+    function pidSend(silent) {
+      const kp = g_pid.kp.toFixed(2), ki = g_pid.ki.toFixed(2), kd = g_pid.kd.toFixed(2);
+      writeSerial(`!SET:PID=${kp},${ki},${kd}#`);
+      pidSave();
+      if (!silent) {
+        appendLog('PID', `下发巡线 PID: Kp=${kp}  Ki=${ki}  Kd=${kd}`);
+        pidSetStatus(`已下发：Kp=${kp}  Ki=${ki}  Kd=${kd}（等小车回帧确认）`, 'ok');
+      }
+    }
+    function pidRead() {
+      writeSerial('!GET:PID#');
+      pidSetStatus('正在回读小车里的参数…');
+    }
+    function pidPreset(name) {
+      if (name === 'soft')      { g_pid.kp = 3.2; g_pid.ki = 0; g_pid.kd = 0.7; }
+      else if (name === 'sharp'){ g_pid.kp = 5.6; g_pid.ki = 0; g_pid.kd = 0.4; }
+      else                      { g_pid.kp = PID_DEFAULT.kp; g_pid.ki = PID_DEFAULT.ki; g_pid.kd = PID_DEFAULT.kd; }
+      pidApplyUI();
+      pidSetStatus('已套用预设，点「下发到小车」生效', 'warn');
+    }
+    /* 小车回的确认帧：!PID=<kp*100>,<ki*100>,<kd*100># */
+    function onPidPacket(text) {
+      if (!text || !text.startsWith('!PID=')) return false;
+      const p = text.slice(5).replace('#', '').split(',').map(Number);
+      if (p.length < 3 || p.some(v => !isFinite(v))) return false;
+      g_pid.kp = p[0] / 100;
+      g_pid.ki = p[1] / 100;
+      g_pid.kd = p[2] / 100;
+      g_pid.fromBoard = true;
+      pidApplyUI();
+      pidSave();
+      pidSetStatus(`小车当前：Kp=${g_pid.kp.toFixed(2)}  Ki=${g_pid.ki.toFixed(2)}  Kd=${g_pid.kd.toFixed(2)}`, 'ok');
+      return true;
+    }
+    function openPidModal() {
+      const modal = document.getElementById('pidModal');
+      if (!modal) return;
+      pidLoadSaved();
+      pidApplyUI();
+      modal.style.display = 'flex';
+      pidRead();
+    }
+    function closePidModal() {
+      const modal = document.getElementById('pidModal');
+      if (modal) modal.style.display = 'none';
+    }
+    function onPidBackdropClick(event) {
+      if (event.target && event.target.id === 'pidModal') closePidModal();
+    }
+    /* 连上串口后把本地保存的参数补发一遍：车断电重烧也不会丢整定结果 */
+    function pidPushSaved() {
+      pidLoadSaved();
+      setTimeout(() => pidSend(true), 400);
+      setTimeout(() => pidRead(), 700);
     }
     /* ── 方向状态打包（支持任意组合，所以能走斜线）──────────────────
      * 单字符协议一次只能表达一个方向：按 W 再按 A，'a' 会把 'w' 覆盖掉，
@@ -2206,10 +2447,17 @@
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
       }
-      /* 按 ESC 键关闭大窗查看模式 */
-      if (e.key === 'Escape' && g_enlargedType) {
-        closeEnlargeModal();
-        return;
+      /* 按 ESC 键关闭大窗查看模式 / PID 面板 */
+      if (e.key === 'Escape') {
+        const pid = document.getElementById('pidModal');
+        if (pid && pid.style.display !== 'none') {
+          closePidModal();
+          return;
+        }
+        if (g_enlargedType) {
+          closeEnlargeModal();
+          return;
+        }
       }
       if (e.repeat) return;               /* 浏览器的自动重复不要，状态机自己记 */
       const k = e.key;
@@ -2396,6 +2644,8 @@
         /* 同样：串口一打开不算在线，等第一帧遥测到达再变绿 */
         updateLinkStatus(false, '串口已打开 · 等待小车遥测…', true);
         appendLog('SYS', 'Web Serial 连接成功: 115200 8N1');
+        /* 把上次整定好的巡线 PID 补发给小车，并回读确认 */
+        pidPushSaved();
         /* 启动 200ms 心跳定时器维持小车绿灯常亮 */
         g_heartbeatTimer = setInterval(async () => {
           if (g_isConnected) {
@@ -2950,6 +3200,21 @@
       trajCtx.moveTo(ax, 0); trajCtx.lineTo(ax, h);
       trajCtx.moveTo(0, ay); trajCtx.lineTo(w, ay);
       trajCtx.stroke();
+      /* 手绘路线参考线：启动后把用户画的那条线以虚线留在图上，
+       * 跑完一眼就能看出"跟没跟住"。 */
+      if (drive && drive.exactPath && drive.exactPath.length > 1) {
+        trajCtx.save();
+        trajCtx.setLineDash([7, 6]);
+        trajCtx.strokeStyle = 'rgba(255, 179, 0, 0.55)';
+        trajCtx.lineWidth = 1.8;
+        trajCtx.beginPath();
+        trajCtx.moveTo(trajSX(drive.exactPath[0].x), trajSY(drive.exactPath[0].y));
+        for (let i = 1; i < drive.exactPath.length; i++) {
+          trajCtx.lineTo(trajSX(drive.exactPath[i].x), trajSY(drive.exactPath[i].y));
+        }
+        trajCtx.stroke();
+        trajCtx.restore();
+      }
       /* 轨迹折线：按 seg 分段，跳变/清零处断开，不画假直线 */
       trajCtx.lineJoin = 'round';
       trajCtx.lineCap = 'round';
@@ -3179,7 +3444,10 @@
       path: [],
       idx: 0,
       look: 280,         /* 前视距离 mm */
-      speed: 42,         /* 基础占空比 % */
+      speed: 42,         /* 基础占空比 %（取左侧滑块的当前设定值） */
+      exact: false,      /* 手绘路线：小前视 + 窄索引窗口，严格贴着画的线走 */
+      exactPath: null,   /* 手绘路线原样保留，用于地图上叠加显示 */
+      deadline: 0,       /* 按路线长度/速度算出的超时时刻 */
       turnDir: 1,        /* +1: 左轮加速 = 顺时针(右转)，由自检写入 */
       pivot: false,      /* 原地转过渡标志 */
       thenPath: null,    /* 两段式：先回起点，到点后切到这条路线 */
@@ -3240,7 +3508,6 @@
       return len;
     }
     /* 起一条路线：把当前位置接在最前面，避免"瞬移"到路点上去 */
-    /* 起一条路线：把当前位置接在最前面，避免"瞬移"到路点上去 */
     function beginPath(route) {
       const cur = traj.pts[traj.pts.length - 1];
       drive.path = [{ x: cur.x, y: cur.y }].concat(route);
@@ -3258,7 +3525,7 @@
       drive.alignDoneCount = 0;
       drive.largeErrCount = 0;
     }
-    function autoStart(mode, routeIn) {
+    function autoStart(mode, routeIn, opts) {
       if (drive.active) return;
 
       /* 路线来源优先级：显式传入 > 已保存的规范路线 > 从当前轨迹采一次。
@@ -3298,19 +3565,36 @@
           return;
         }
       }
-      const sel = document.getElementById('autoSpeed');
-      drive.speed = parseInt(sel ? sel.value : '42', 10) || 42;
-      /* 前视距离：42%基准下由原 280mm 增至 525mm (~3.5倍轴距)。
-       * 充足的前视距离提供关键几何超前相位，将欠阻尼系统转变为临界阻尼，彻底消除画龙与摇头晃脑。 */
-      drive.look = 420 + drive.speed * 2.5;
+      /* 速度直接取左侧滑块的"当前设定速度"（g_speedPct）：回放 / 原路返回 / 往返循环
+       * 全用同一个值。以前读的是大窗底栏那个 select，平时被大窗挡着看不见，改完速度
+       * 返回还是按 42% 跑，跟"当前设定"完全脱节。 */
+      drive.speed = Math.max(5, Math.min(100, Math.round(g_speedPct || 42)));
+      const spdSel = document.getElementById('autoSpeed');
+      if (spdSel) {
+        const near = Array.from(spdSel.options).reduce((a, o) =>
+          Math.abs(parseInt(o.value, 10) - drive.speed) < Math.abs(parseInt(a.value, 10) - drive.speed) ? o : a);
+        spdSel.value = near.value;
+      }
+      drive.exact = !!(opts && opts.exact);
+      /* 前视距离：录制自动跑的长路线用大前视（几何超前相位，抑制画龙）；
+       * 手绘路线要"贴着线走"，前视压到 140~240mm —— 否则一根比前视还短的线，
+       * 纯追踪一眼就锁到终点，车会直接抄近路冲过去，根本不吃你画的形状。 */
+      drive.look = drive.exact
+        ? Math.max(140, Math.min(240, 100 + drive.speed * 1.8))
+        : 420 + drive.speed * 2.5;
       drive.mode = mode;
       drive.active = true;
       drive.thenPath = null;
+      drive.exactPath = drive.exact ? route.map(p => ({ x: p.x, y: p.y })) : null;
       drive.lastYaw = traj.yaw;
       drive.yawRateFilt = 0;
+      /* 超时按路线长度和速度估算，低速跑长线不再被 90s 一刀切 */
+      const routeMm = routeLength(route);
+      drive.deadline = Date.now() + 60000 + routeMm / Math.max(120, drive.speed * 5.5) * 1000;
       /* 回放的关键细节：刚录完路线时车停在**终点**，如果直接从当前位置
-       * 起跑，第一帧就判定"到达"。所以先直线开回起点，到了再切换到正式路线。*/
-      if (mode === 'replay') {
+       * 起跑，第一帧就判定"到达"。所以先直线开回起点，到了再切换到正式路线。
+       * 手绘路线不走这条路：用户画的线本来就该从车当前位置接出去，直接开始贴线。 */
+      if (mode === 'replay' && !drive.exact) {
         const s0 = route[0];
         const dStart = Math.hypot(s0.x - cur.x, s0.y - cur.y);
         if (dStart > 250) {
@@ -3322,6 +3606,12 @@
           setAutoState('回起点…');
           return;
         }
+      }
+      if (drive.exact) {
+        const dStart = Math.hypot(route[0].x - cur.x, route[0].y - cur.y);
+        appendLog('AUTO', dStart > 150
+          ? `手绘路线起点距车 ${(dStart / 1000).toFixed(2)}m：先沿直线接到起点，之后严格按画的线走`
+          : '手绘路线起点就在车旁：从当前位置直接贴线出发');
       }
       beginPath(route);
       /* 核心平滑机制：原路返回模式先进入原地平稳掉头对齐阶段，
@@ -3340,8 +3630,8 @@
       }
       drive.state = (mode === 'return') ? 'align' : firstState;
       const km = (routeLength(route) / 1000).toFixed(2);
-      setAutoState(mode === 'return' ? '掉头中…' : '回放中…');
-      appendLog('AUTO', `${mode === 'return' ? '原路返回' : '回放原路'}启动：` +
+      setAutoState(mode === 'return' ? '掉头中…' : (drive.exact ? '循迹中…' : '回放中…'));
+      appendLog('AUTO', `${drive.exact ? '手绘循迹' : (mode === 'return' ? '原路返回' : '回放原路')}启动：` +
         `${route.length} 个路点 / 全长 ${km}m，基础占空比 ${drive.speed}%，前视 ${drive.look.toFixed(0)}mm`);
     }
     function autoStop(byUser) {
@@ -3353,6 +3643,8 @@
       drive.state = 'idle';
       drive.path = [];
       drive.thenPath = null;
+      drive.exactPath = null;
+      drive.exact = false;
       drive.outL = 0;
       drive.outR = 0;
       writeSerial('!D:0,0#');
@@ -3367,6 +3659,8 @@
       drive.state = 'idle';
       drive.path = [];
       drive.thenPath = null;
+      drive.exactPath = null;
+      drive.exact = false;
       drive.outL = 0;
       drive.outR = 0;
       setAutoState('已接管');
@@ -3394,9 +3688,11 @@
       const path = drive.path;
       if (path.length < 2) { autoStop(false); return; }
       const p = traj.pts[traj.pts.length - 1];
-      /* 1) 在 idx 附近找最近路点（限制搜索窗口，防止"抄近道"穿到对面去） */
-      const from = Math.max(0, drive.idx - 6);
-      const to = Math.min(path.length, drive.idx + 45);
+      /* 1) 在 idx 附近找最近路点（限制搜索窗口，防止"抄近道"穿到对面去）。
+       *    手绘路线窗口再收紧一档：窗口一宽，最近点就会跳到前面几段去，
+       *    车立刻切直线过去——这就是"不按画的线走"的直接原因。 */
+      const from = Math.max(0, drive.idx - (drive.exact ? 3 : 6));
+      const to = Math.min(path.length, drive.idx + (drive.exact ? 14 : 45));
       let best = drive.idx, bd = Infinity;
       for (let i = from; i < to; i++) {
         const dx = path[i].x - p.x, dy = path[i].y - p.y;
@@ -3417,7 +3713,8 @@
       }
       const endP = path[path.length - 1];
       const dEnd = Math.hypot(endP.x - p.x, endP.y - p.y);
-      const arriveR = drive.thenPath ? 150 : 80;   /* 回起点那一段可以粗一点 */
+      /* 回起点那一段可以粗一点；手绘路线要踩准终点，判到达半径收紧 */
+      const arriveR = drive.thenPath ? 150 : (drive.exact ? 60 : 80);
       if (dEnd < arriveR) {
         if (drive.thenPath) {
           /* 已到起点：切换到真正的记录路线，继续跑 */
@@ -3452,13 +3749,13 @@
         appendLog('AUTO', `到达终点（距终点 ${dEnd.toFixed(0)}mm）`);
         return;
       }
-      /* 保险：跑太久说明跟丢了，别让它一直绕 */
+      /* 保险：跑太久说明跟丢了，别让它一直绕。超时按路线长度/速度算好放在 drive.deadline */
       if (!drive.t0) drive.t0 = Date.now();
-      if (Date.now() - drive.t0 > 90000) {
+      if (drive.deadline && Date.now() > drive.deadline) {
         autoStop(false);
         writeSerial(' ');
         setAutoState('超时');
-        appendLog('AUTO', '自动驾驶超过 90s 仍未到点，已强制停止');
+        appendLog('AUTO', `自动驾驶超过 ${Math.round((drive.deadline - drive.t0) / 1000)}s 仍未到点，已强制停止`);
         return;
       }
       /* 4) 航向误差与目标方位计算 */
@@ -3496,8 +3793,10 @@
         }
         if (drive.state === 'align') {
           const sgn = err > 0 ? 1 : -1;
-          /* 旋转功率带柔和非线性减速：180° 时约 35%，靠近 20° 时平缓降至 23%，防止过冲摆头 */
-          const pwr = 23 + Math.min(13, aerr * 0.18);
+          /* 旋转功率带柔和非线性减速：180° 时约 35%，靠近 20° 时平缓降至 23%，防止过冲摆头。
+           * 基准功率跟当前设定速度走：42% → 23%，60% → 33%，25% → 14%。 */
+          const pwrBase = Math.max(14, Math.min(46, drive.speed * 0.55));
+          const pwr = pwrBase + Math.min(13, aerr * 0.18);
           const targetL = drive.turnDir * sgn * pwr;
           const targetR = -drive.turnDir * sgn * pwr;
           /* 输出平滑滤波，消除急起急停电机颤抖 */
@@ -3527,11 +3826,13 @@
         crossDist = (segDx * (p.y - pA.y) - segDy * (p.x - pA.x)) / segLen;
       }
       /* 横向偏距轻量级饱和补偿：中区(|crossDist|<=25mm)不干预，完全信任 Pure Pursuit 几何前视；
-       * 偏大时软饱和补偿，上限仅 ±6°，绝不上冲 */
+       * 偏大时软饱和补偿。手绘路线要贴着线走，补偿上限放宽到 ±10° 并提高斜率。 */
       let crossBias = 0;
       if (Math.abs(crossDist) > 25) {
         const excess = Math.abs(crossDist) - 25;
-        crossBias = Math.sign(crossDist) * Math.min(6, excess * 0.04);
+        const biasCap = drive.exact ? 10 : 6;
+        const biasGain = drive.exact ? 0.06 : 0.04;
+        crossBias = Math.sign(crossDist) * Math.min(biasCap, excess * biasGain);
       }
       let fusedErr = err + crossBias;
       while (fusedErr > 180) fusedErr -= 360;
@@ -3568,8 +3869,12 @@
       if (Math.abs(fusedErr) <= 1.2 && Math.abs(crossDist) <= 18) {
         turn = 0;
       } else {
-        const Kp = 0.38;     /* 柔和比例增益，提供稳定向心加速度 */
-        const Kd = 0.045;    /* 角速度主动反舵阻尼，消除超调摆头 */
+        /* 增益随速度归一化：差速底盘走同样曲率需要的轮速差 ∝ v，
+         * 同一套 Kp/Kd 在 25% 和 60% 下阻尼比完全不同（低速发飘、高速画龙）。
+         * 以 42% 为基准线性缩放，两端各限幅，换速度不用重新整定。 */
+        const kSpd = Math.max(0.55, Math.min(1.75, drive.speed / 42));
+        const Kp = 0.38 * kSpd;     /* 柔和比例增益，提供稳定向心加速度 */
+        const Kd = 0.045 * kSpd;    /* 角速度主动反舵阻尼，消除超调摆头 */
         turn = Kp * fusedErr - Kd * drive.yawRateFilt;
       }
       /* 8) 速度规划与差速输出平滑 */
@@ -3577,7 +3882,9 @@
       /* 大弯适度减速提高舵效，终点前平稳收油 */
       let v = drive.speed * (1.0 - 0.25 * Math.min(1.0, aFused / 45.0));
       v *= (0.60 + 0.40 * Math.min(1.0, remain / 450.0));
-      if (v < 30) v = 30;
+      /* 低速下限跟着设定值走：原来硬写 30%，滑块调到 20% 也照样 30%，等于没生效 */
+      const vFloor = Math.max(14, Math.min(30, drive.speed * 0.55));
+      if (v < vFloor) v = vFloor;
       /* 差速限幅：保留内轮转速，绝不锁死单轮，保持行进流畅度 */
       const turnMax = Math.max(10, drive.speed - 16);
       turn = Math.max(-turnMax, Math.min(turnMax, turn));
@@ -3590,7 +3897,7 @@
       const outLClamped = Math.max(-100, Math.min(100, drive.outL));
       const outRClamped = Math.max(-100, Math.min(100, drive.outR));
       writeSerial('!D:' + Math.round(outLClamped * 10) + ',' + Math.round(outRClamped * 10) + '#');
-      setAutoState((drive.mode === 'return' ? '返航 ' : '回放 ') +
+      setAutoState((drive.exact ? '循迹 ' : (drive.mode === 'return' ? '返航 ' : '回放 ')) +
         (remain / 1000).toFixed(2) + 'm · 偏' + fusedErr.toFixed(1) + '° · 距线' + crossDist.toFixed(0) + 'mm');
     }
     /* 转向极性自检：给一次已知差速，看航向往哪边变。
@@ -3841,8 +4148,9 @@
       if (pts.length < 2) { appendLog('AUTO', '画的线太短，再画长一点'); return; }
 
       routeDrawToggle(false);
-      appendLog('AUTO', `手绘路线：${pts.length} 个路点 / 全长 ${(routeLength(pts) / 1000).toFixed(2)}m，开始循迹`);
-      autoStart('replay', pts);
+      appendLog('AUTO', `手绘路线：${pts.length} 个路点 / 全长 ${(routeLength(pts) / 1000).toFixed(2)}m，` +
+        '从车当前位置接出去，沿这条线走完全程');
+      autoStart('replay', pts, { exact: true });
     }
 
     /* 绘制模式下的鼠标/触摸捕获：画的过程中只记像素，松手才换算成世界坐标 */
