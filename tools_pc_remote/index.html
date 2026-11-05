@@ -890,7 +890,11 @@
     #pidModal .btn-preset { white-space: nowrap; }
     #pidModal .enlarge-footer { flex-wrap: wrap; }
     .map-wrap.drawing { cursor: crosshair; }
-    .map-wrap.drawing .map-hint::after { content: ''; }
+    .map-wrap.drawing .map-hint { font-size: 0; }
+    .map-wrap.drawing .map-hint::after {
+      content: '左键拖动画线 · 滚轮缩放 · 右键/Shift 拖动平移 · 双击一次性自适应';
+      font-size: 10px;
+    }
     .auto-sel {
       background: #0d1420;
       color: #cfd8dc;
@@ -1672,7 +1676,7 @@
             <button class="btn-preset btn-ai" onclick="autoReturn()" title="沿当前路线原路自主反向返航">↩️ 原路返回</button>
             <button class="btn-preset btn-ai" onclick="routeDrawToggle()" title="在图上手绘一条路线，让小车按线行驶">✏️ 绘制路线</button>
             <button id="trajAuto" class="btn-preset on" onclick="trajToggleAuto()">自适应</button>
-            <button class="btn-preset" onclick="trajReset(true)">清空</button>
+            <button class="btn-preset" onclick="clearMapAndReference()" title="清空轨迹并移除手绘路线虚线">清空</button>
             <div class="dropdown-wrap" id="trajDropWrap">
               <button class="btn-preset" onclick="toggleTrajDropdown(event)">操作 ▾</button>
               <div id="trajDropMenu" class="dropdown-menu">
@@ -1706,13 +1710,14 @@
           <button class="btn-preset" onclick="autoReturn()">原路返回</button>
           <button class="btn-preset" id="autoLoopBtn" onclick="autoLoopToggle()">🔁 往返循环</button>
           <button class="btn-preset" onclick="routeDrawToggle()">✏️ 绘制路线</button>
+          <button class="btn-preset" onclick="clearRouteReference()" title="移除定位图上残留的手绘路线虚线">🧹 清除参考线</button>
           <button class="btn-preset danger" onclick="autoStop(true)">停止</button>
           <span id="autoState" class="auto-state">待命</span>
         </div>
         <!-- 绘制路线时的工具条 -->
         <div class="draw-bar" id="drawBar" style="display: none;">
           <span class="auto-name">绘制路线</span>
-          <span class="draw-tip">在图上按住拖动即可画线（滚轮缩放、右键拖动平移）</span>
+          <span class="draw-tip">左键拖动画线 · 滚轮缩放 · 右键/Shift 拖动平移 · 双击一次性自适应</span>
           <button class="btn-preset" onclick="routeDrawUndo()">撤销</button>
           <button class="btn-preset" onclick="routeDrawClear()">清空</button>
           <button class="btn-preset on" onclick="routeDrawRun()">开始循迹</button>
@@ -2997,7 +3002,7 @@
      *   短程（十几米内）够玩，做比赛定位要靠场地标记或视觉纠正。
      * ══════════════════════════════════════════════════════════════════ */
     const TRAJ_MAX_PTS = 30000;      /* 20Hz 下约 25 分钟，超出丢最早一半 */
-    const WEB_BUILD = '2026-11-05 画布坐标版';   /* 启动时打进日志，便于确认浏览器跑的是哪一版 */
+    const WEB_BUILD = '2026-11-05 绘制可缩放版';   /* 启动时打进日志，便于确认浏览器跑的是哪一版 */
     const TRAJ_YAW_SIGN = 1.0;       /* 右转时轨迹往右弯；若整体镜像，改成 -1 */
     const traj = {
       pts: [{ x: 0, y: 0, v: 0, yaw: 0, seg: 0, t: 0 }],
@@ -3012,7 +3017,7 @@
       panX: 0, panY: 0,
       zoomMul: 1,
       autoFit: true,
-      freeze: false,                 /* 绘制期间锁死视图：自动缩放/重定心会让刚画的线整体漂移 */
+      freeze: false,                 /* 绘制期间只关「连续自适应重定心」；滚轮缩放/右键平移仍然可用 */
       recording: true,
       statT: 0
     };
@@ -3102,12 +3107,14 @@
       traj.cx = traj.cy = 0;
       traj.panX = traj.panY = 0;
       traj.zoomMul = 1;
-      traj.autoFit = true;
+      /* 绘制中不要打开连续自适应：每来一帧遥测就重定心，画好的线会在屏幕上漂。
+       * 想取景请用滚轮缩放 / 右键平移 / 双击一次性自适应。 */
+      traj.autoFit = !traj.freeze;
       traj.scale = traj.target = 0.5;
       traj.statT = 0;
       if (typeof g_compassDisplayYaw !== 'undefined') g_compassDisplayYaw = undefined;
       const btn = document.getElementById('trajAuto');
-      if (btn) btn.classList.add('on');
+      if (btn) btn.classList.toggle('on', traj.autoFit);
       if (byUser) appendLog('MAP', '轨迹已清空，当前位置作为新原点');
     }
     /* 每收到一帧遥测调用一次 */
@@ -3150,8 +3157,9 @@
      * 否则刚开机只有 1mm 位移时会被放大到看不见网格）。 */
     function trajUpdateView() {
       const pad = 36;
-      /* freeze：绘制中无论谁把 autoFit 打开（双击/自适应按钮/清空里程），都不许动视图。
-       * 视图一动，之前落笔的世界坐标就会被换算到别处，看起来就是"画在原点、线跑到右下角"。 */
+      /* freeze：绘制中屏蔽「连续」自适应重定心（每帧按轨迹 min/max 重算会让视图慢慢漂）。
+       * 已完成的笔画是世界坐标，本来就会跟着缩放/平移一起动，这是对的；
+       * 真正不能动的是"每帧自动重定心"，而不是用户主动缩放。 */
       if (traj.autoFit && !traj.freeze) {
         const dx = Math.max(traj.maxX - traj.minX, 150);
         const dy = Math.max(traj.maxY - traj.minY, 150);
@@ -3325,6 +3333,12 @@
         : '已暂停记录（里程继续累计，恢复后从当前位置接着画）');
     }
     function trajToggleAuto() {
+      if (traj.freeze) {
+        /* 绘制中不做连续自适应，改成一次性把轨迹 + 已画的线装进视野 */
+        drawFitOnce();
+        appendLog('MAP', '绘制模式：已一次性自适应取景（滚轮缩放 / 右键拖动平移仍可用）');
+        return;
+      }
       traj.autoFit = !traj.autoFit;
       document.getElementById('trajAuto').classList.toggle('on', traj.autoFit);
       if (traj.autoFit) { traj.panX = traj.panY = 0; traj.zoomMul = 1; }
@@ -3368,6 +3382,7 @@
     function onClearOdo() {
       sendCmd('2');
       trajReset(true);
+      clearDrawnReference();   /* 换了原点，旧的手绘参考线也没意义了 */
     }
     (function trajInit() {
       trajResize();
@@ -3385,28 +3400,40 @@
         } catch (err) { /* 老浏览器没有就算了，还有每帧的 trajSyncSize 兜底 */ }
       }
       const wrap = document.getElementById('mapWrap');
+      /* 绘制模式：左键画线，右键 / 中键 / Shift+左键 平移；滚轮任何时候都能缩放。
+       * 已完成的笔画是世界坐标，会跟着地图一起缩放平移；正在画的那一笔是屏幕像素，
+       * 视图怎么变它都黏在鼠标下，松手才用当时的视图一次性换算成世界坐标。 */
+      const panIntent = (e) => e.button === 1 || e.button === 2 || e.shiftKey;
+      wrap.addEventListener('contextmenu', (e) => { if (traj.freeze) e.preventDefault(); });
       wrap.addEventListener('wheel', (e) => {
         e.preventDefault();
-        /* 画线时锁住视图：缩放会让已经落笔的线和鼠标错位 */
-        if (typeof drawState !== 'undefined' && drawState.on) return;
         if (traj.autoFit) {
           traj.autoFit = false;
           document.getElementById('trajAuto').classList.remove('on');
         }
-        const f = Math.pow(1.0015, -e.deltaY);
-        traj.zoomMul = Math.min(80, Math.max(0.015, traj.zoomMul * f));
+        const before = traj.zoomMul;
+        traj.zoomMul = Math.min(80, Math.max(0.015, before * Math.pow(1.0015, -e.deltaY)));
+        /* 以鼠标为锚点缩放：光标下的世界点在缩放前后保持不动，画图时能精确放大细节 */
+        const ratio = traj.zoomMul / before;
+        if (Math.abs(ratio - 1) > 1e-6) {
+          const p = trajEventLocal(e.clientX, e.clientY);
+          traj.panX = p.px - traj.vw / 2 - (p.px - traj.vw / 2 - traj.panX) * ratio;
+          traj.panY = p.py - traj.vh / 2 - (p.py - traj.vh / 2 - traj.panY) * ratio;
+        }
+        if (traj.freeze) { drawOverlayRender(); drawHudUpdate(true); }
       }, { passive: false });
       let drag = null;
       wrap.addEventListener('pointerdown', (e) => {
-        /* 画线时不允许平移，否则手一拖地图和线一起动 */
-        if (typeof drawState !== 'undefined' && drawState.on) return;
+        if (traj.freeze) {
+          if (!panIntent(e)) return;      /* 左键留给画线 */
+          e.preventDefault();
+        }
         drag = { x: e.clientX, y: e.clientY, px: traj.panX, py: traj.panY };
         wrap.classList.add('dragging');
-        wrap.setPointerCapture(e.pointerId);
+        try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
       });
       wrap.addEventListener('pointermove', (e) => {
         if (!drag) return;
-        if (typeof drawState !== 'undefined' && drawState.on) { drag = null; return; }
         if (traj.autoFit) {
           traj.autoFit = false;
           document.getElementById('trajAuto').classList.remove('on');
@@ -3418,8 +3445,12 @@
       wrap.addEventListener('pointerup', endDrag);
       wrap.addEventListener('pointercancel', endDrag);
       wrap.addEventListener('dblclick', () => {
-        /* 绘制中双击会把视图重新自动缩放，画好的线跟着跑，直接忽略 */
-        if (typeof drawState !== 'undefined' && drawState.on) return;
+        if (traj.freeze) {
+          /* 绘制中不启用「连续自适应」，改成一次性把轨迹 + 已画的线装进视野 */
+          drawFitOnce();
+          appendLog('MAP', '绘制模式：已一次性自适应取景（滚轮缩放 / 右键拖动平移仍可用）');
+          return;
+        }
         traj.autoFit = true;
         traj.panX = traj.panY = 0;
         traj.zoomMul = 1;
@@ -3475,6 +3506,27 @@
       alignDoneCount: 0,
       largeErrCount: 0
     };
+    /* 橙色虚线参考线只在「这一次手绘循迹」期间有意义：
+     * 到达终点 / 停止 / 人工接管 / 超时都要清掉，否则会永远留在定位图上。
+     * 以前只在 autoStop / autoAbort 里清，跑完正常到达那条分支漏了，就再也清不掉。 */
+    function clearDrawnReference() {
+      drive.exactPath = null;
+      drive.exact = false;
+    }
+    /* 给按钮用：无论车是不是还在跑，都能把地图上的参考虚线清掉 */
+    function clearRouteReference() {
+      const had = !!drive.exactPath;
+      clearDrawnReference();
+      appendLog('AUTO', had
+        ? (drive.active ? '已清除手绘参考线（循迹继续）' : '已清除手绘参考线')
+        : '地图上当前没有手绘参考线');
+      if (had && !drive.active) setAutoState('待命');
+    }
+    /* 地图面板的「清空」按钮：轨迹和手绘参考线一起清，不留残影 */
+    function clearMapAndReference() {
+      trajReset(true);
+      clearDrawnReference();
+    }
     /* localStorage 在 file:// / 隐私模式下会直接抛异常，包一层兜底 */
     function lsGet(k) {
       try { return localStorage.getItem(k); } catch (e) { return null; }
@@ -3642,15 +3694,21 @@
     }
     function autoStop(byUser) {
       if (!drive.active) {
-        if (byUser) appendLog('AUTO', '当前没有在自动驾驶');
+        /* 正常跑完时 active 已是 false，但参考线可能还留着：点「停止」也要能清掉 */
+        if (drive.exactPath) {
+          clearDrawnReference();
+          setAutoState('待命');
+          appendLog('AUTO', '已清除手绘参考线');
+        } else if (byUser) {
+          appendLog('AUTO', '当前没有在自动驾驶');
+        }
         return;
       }
       drive.active = false;
       drive.state = 'idle';
       drive.path = [];
       drive.thenPath = null;
-      drive.exactPath = null;
-      drive.exact = false;
+      clearDrawnReference();
       drive.outL = 0;
       drive.outR = 0;
       writeSerial('!D:0,0#');
@@ -3665,8 +3723,7 @@
       drive.state = 'idle';
       drive.path = [];
       drive.thenPath = null;
-      drive.exactPath = null;
-      drive.exact = false;
+      clearDrawnReference();
       drive.outL = 0;
       drive.outR = 0;
       setAutoState('已接管');
@@ -3749,10 +3806,12 @@
         drive.active = false;
         drive.state = 'idle';
         drive.path = [];
+        /* 跑完就把橙色虚线参考线一起收掉，别一直留在定位图上 */
+        clearDrawnReference();
         writeSerial('!D:0,0#');
         writeSerial(' ');                    /* 再补一条急停，确保刹车而不是滑行 */
         setAutoState('已到达');
-        appendLog('AUTO', `到达终点（距终点 ${dEnd.toFixed(0)}mm）`);
+        appendLog('AUTO', `到达终点（距终点 ${dEnd.toFixed(0)}mm），手绘参考线已清除`);
         return;
       }
       /* 保险：跑太久说明跟丢了，别让它一直绕。超时按路线长度/速度算好放在 drive.deadline */
@@ -3976,6 +4035,34 @@
      * 不会出现"手在原点、线跑到右下角"这种对不上的情况。 */
     const drawState = { on: false, strokes: [], cur: null, dragging: false, lastPx: 0, lastPy: 0, errPx: 0 };
 
+    /* 绘制模式下的一次性取景：把「轨迹 + 已画的线」装进视野，但不打开连续自适应。
+     * 连续自适应每帧按轨迹 min/max 重定心，画线时视图会慢慢漂；一次性取景不会。 */
+    function drawFitOnce() {
+      trajSyncSize();
+      let minX = traj.minX, maxX = traj.maxX, minY = traj.minY, maxY = traj.maxY;
+      const add = (x, y) => {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      };
+      for (const st of drawState.strokes) for (const q of st) add(q.x, q.y);
+      if (drawState.cur) for (const q of drawState.cur) {
+        const w = trajLocalToWorld(q.px, q.py); add(w.x, w.y);
+      }
+      const pad = 40;
+      const dx = Math.max(maxX - minX, 300), dy = Math.max(maxY - minY, 300);
+      const s = Math.min((traj.vw - pad * 2) / dx, (traj.vh - pad * 2) / dy);
+      traj.scale = traj.target = Math.max(0.004, Math.min(s, 1.1));
+      traj.cx = (minX + maxX) / 2;
+      traj.cy = (minY + maxY) / 2;
+      traj.panX = traj.panY = 0;
+      traj.zoomMul = 1;
+      traj.autoFit = false;
+      const btn = document.getElementById('trajAuto');
+      if (btn) btn.classList.remove('on');
+      drawOverlayRender();
+      drawHudUpdate(true);
+    }
+
     function drawOverlayResize() {
       if (!drawOverlay) return;
       const dpr = window.devicePixelRatio || 1;
@@ -4093,6 +4180,8 @@
 
     function routeDrawToggle(force) {
       const on = (force === undefined) ? !drawState.on : !!force;
+      /* 新一轮绘制先收掉上一轮可能残留的橙色虚线（只动显示，不影响正在跑的循迹参数） */
+      if (on) drive.exactPath = null;
       /* 画线需要大画布：从工具栏点进来时先展开大窗 */
       if (on && g_enlargedType !== 'traj') openEnlargeModal('traj');
       drawState.on = on;
@@ -4154,8 +4243,14 @@
       if (pts.length < 2) { appendLog('AUTO', '画的线太短，再画长一点'); return; }
 
       routeDrawToggle(false);
+      /* 保留刚才调好的视野：一按「开始循迹」就把缩放/平移复位成全图，
+       * 画的时候放大的细节会立刻跳掉，橙色参考线也可能跑到屏幕外。
+       * 想回到自动取景，点「自适应」或「清空」即可。 */
+      traj.autoFit = false;
+      const autoBtn = document.getElementById('trajAuto');
+      if (autoBtn) autoBtn.classList.remove('on');
       appendLog('AUTO', `手绘路线：${pts.length} 个路点 / 全长 ${(routeLength(pts) / 1000).toFixed(2)}m，` +
-        '从车当前位置接出去，沿这条线走完全程');
+        '从车当前位置接出去，沿这条线走完全程；已保留当前缩放视野');
       autoStart('replay', pts, { exact: true });
     }
 
@@ -4165,6 +4260,8 @@
       if (!wrap) return;
       wrap.addEventListener('pointerdown', (e) => {
         if (!drawState.on) return;
+        /* 右键 / 中键 / Shift+左键 是平移手势，交给 trajInit 的平移处理，不画线 */
+        if (e.button === 1 || e.button === 2 || e.shiftKey) return;
         e.preventDefault();
         e.stopPropagation();
         const p = trajEventLocal(e.clientX, e.clientY);
