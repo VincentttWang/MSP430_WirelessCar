@@ -53,5 +53,5 @@ pause
 goto MENU
 
 :BUILD_THEN_FLASH
-call "%~dp0一键编译全部固件.bat"
+call "%~dp0build_all.bat"
 goto FLASH_ALL

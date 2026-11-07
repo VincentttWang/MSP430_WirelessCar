@@ -25,6 +25,16 @@ scratch/
 *.sublime-workspace
 
 # --------------------------------------------------
+# Report generation intermediates & submission bundle
+# The final report (docs/*.docx / *.pdf), docs/images/report/ and the
+# submission ZIP at repo root ARE committed; these two are not:
+#   output/  -> Markdown / HTML / scripts used to generate the report
+#   MSP430设计报告附件_*/ -> expanded copy of the ZIP (keeps the repo lean)
+# --------------------------------------------------
+output/
+MSP430设计报告附件_U202413712_王佳宁/
+
+# --------------------------------------------------
 # Python Bytecode & Environments
 # --------------------------------------------------
 __pycache__/
