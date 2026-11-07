@@ -27,15 +27,27 @@
 
 ## 🖼️ 界面预览
 
-| 电脑端 · 网页测控站 | 手机端 · 横屏手柄 |
-| :---: | :---: |
-| ![电脑端绘制路线](docs/images/desktop_draw_route.png) | ![手机端手柄](docs/images/mobile_handset.png) |
+> 以下图片均取自报告正文插图与车载 OLED 显存还原图，为实物拍摄或实际上位机截屏，未使用重绘的手机端 / 电脑端绘图示意图。
 
-| 车载 OLED · 仪表盘 | 车载 OLED · 八路灰度监视 | 车载 OLED · 校准向导 |
+| 整机实物（图 0-1） | 车载双屏 / 八路灰度监视 / 校准向导（图 3-3） |
+| :---: | :---: |
+| ![小车整机实物与主要模块](docs/images/report/fig0-1.jpg) | ![车载人机界面实物三联](docs/images/report/fig3-3.jpg) |
+
+| 电脑端 · 网页测控站（图 3-1） | 手机端 · 横屏手柄（图 3-2） |
+| :---: | :---: |
+| ![电脑端网页测控站全景](docs/images/report/fig3-1.png) | ![手机端横屏手柄界面](docs/images/report/fig3-2.jpg) |
+
+| 航位推算轨迹地图与比例尺（图 3-4） |
+| :---: |
+| ![航位推算轨迹地图与比例尺](docs/images/report/fig3-4.png) |
+
+**车载 OLED · 补充三联（显存还原）**
+
+| 仪表盘 | 八路灰度监视 | 校准向导 |
 | :---: | :---: | :---: |
 | ![OLED 仪表盘](docs/images/oled_dashboard.png) | ![OLED 灰度监视](docs/images/oled_grayscale_monitor.png) | ![OLED 校准向导](docs/images/oled_calib_white.png) |
 
-> 报告内 8 幅插图（整机实拍、系统框图、程序流程图、横屏手柄、车载界面三联图等）见 [`docs/images/report/`](docs/images/report)。
+> 报告内 8 幅插图的原始文件见 [`docs/images/report/`](docs/images/report)，未经裁剪的实拍素材见其中的 `source/`。
 
 ---
 
@@ -63,6 +75,8 @@ MSP430_WirelessCar/
 ├── start_desktop_gui.bat          启动桌面 GUI 控制端
 └── README.md / LICENSE
 ```
+
+报告内另含 3 幅绘制设计图：[图 1-1　三层职责与数据流](docs/images/report/fig1-1.png) · [图 4-1　总体硬件结构与数据交互](docs/images/report/fig4-1.png) · [图 6-1　主循环与中断时序](docs/images/report/fig6-1.png)。
 
 ---
 
@@ -164,7 +178,7 @@ start_desktop_gui.bat    :: 启动 Python 桌面 GUI 控制端
 | :--- | :--- |
 | [`docs/MSP430无线智能遥测小车设计报告_U202413712_王佳宁.pdf`](docs/MSP430无线智能遥测小车设计报告_U202413712_王佳宁.pdf) | 课程设计报告终稿：方案论证、详细设计、调试报告与逐项验收 |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | 排障手册：I2C 挂死、OLED 掉屏、遥测掉帧、校园网手机接入 |
-| [`docs/images/report/`](docs/images/report) | 报告内 8 幅插图（实拍 / 截屏 / 绘制框图） |
+| [`docs/images/report/`](docs/images/report) | 报告内 8 幅插图（实物实拍 / 上位机截屏 / 绘制框图）与 `source/` 原始素材 |
 | [`NUEDC_2026/[Demo] MSPM0_Car_v5/docs/architecture.md`](NUEDC_2026/%5BDemo%5D%20MSPM0_Car_v5/docs/architecture.md) | 接口桥固件分层与模块依赖 |
 | [`.../docs/build-guide.md`](NUEDC_2026/%5BDemo%5D%20MSPM0_Car_v5/docs/build-guide.md) | Keil / CCS 编译与烧录细节 |
 | [`.../docs/project-structure.md`](NUEDC_2026/%5BDemo%5D%20MSPM0_Car_v5/docs/project-structure.md) | 目录结构与命名约定 |
